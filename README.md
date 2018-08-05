@@ -1,2 +1,2 @@
 # go-red
-go editor
+An 'ed' editor clone written in go.
