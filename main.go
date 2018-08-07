@@ -1,8 +1,13 @@
 package main
 
 import (
+	"bufio"
+	"container/list"
 	"fmt"
+	"os"
 )
+
+const badInput string = "?"
 
 /**
  * Stores information about a line.
@@ -11,10 +16,37 @@ import (
 type Line struct {
 	line string
 }
-func (l Line) String() string {
-	return fmt.Sprintf("line of length %d", len(l.line))
-}
+
+// the current (dot) line
+var dotline *list.Element
 
 func main() {
 	fmt.Println("hello")
+	args := os.Args[1:]
+
+	fmt.Println(args)
+
+	mainloop()
+}
+
+func mainloop() {
+	reader := bufio.NewReader(os.Stdin)
+	quit := false
+	for !quit {
+		cmdStr, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Printf("error: %s", err)
+		} else {
+			//fmt.Printf("got cmd: %s", cmdStr)
+			cmd, err := ParseCommand(cmdStr)
+			if err != nil {
+				fmt.Printf("error: %s\n", err)
+			} else {
+				fmt.Println(cmd)
+			}
+			if cmd.cmd == 'q' {
+				quit = true
+			}
+		}
+	}
 }

@@ -49,11 +49,17 @@ func TestStringReader(t *testing.T) {
 }
 
 func TestStringWriter(t *testing.T) {
-	listOfLines := list.New()
-	listOfLines.PushBack(Line{"first line\n"})
-	listOfLines.PushBack(Line{"second line\n"})
+	listOfLines := createListOfLines([]string{"first line", "second line"})
 
 	createWriterAndDoTest(t, listOfLines)
+}
+
+func createListOfLines(lines []string) *list.List {
+	listOfLines := list.New()
+	for _, line := range lines {
+		listOfLines.PushBack(Line{line + "\n"})
+	}
+	return listOfLines
 }
 
 /* --------------------  helper routines ---------------- */
@@ -75,10 +81,6 @@ func doReadTestWithReader(t *testing.T, data testdata, reader *bufio.Reader) {
 func doReadTest(t *testing.T, data testdata, nbrBytes int, myList *list.List) {
 	// length of list (file lines) must equal length of testdata
 	if myList.Len() != len(data) {
-		for e := myList.Front(); e != nil; e = e.Next() {
-			line := e.Value.(Line)
-			t.Logf(line.String())
-		}
 		t.Fatalf("Expected %d lines but got %d", len(data), myList.Len())
 	}
 	expectedNbrBytes := 0
@@ -103,10 +105,10 @@ func doReadTest(t *testing.T, data testdata, nbrBytes int, myList *list.List) {
 func createWriterAndDoTest(t *testing.T, listOfLines *list.List) {
 	var buff bytes.Buffer               // implements io.Writer
 	var writer = bufio.NewWriter(&buff) // -> bufio
-	
+
 	// tot up total number of bytes in list and build the string
 	expectedNbrBytes := 0
-	var sb  strings.Builder
+	var sb strings.Builder
 	for e := listOfLines.Front(); e != nil; e = e.Next() {
 		line := e.Value.(Line)
 		sb.WriteString(line.line)
