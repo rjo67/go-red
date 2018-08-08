@@ -5,59 +5,57 @@ import (
 	"testing"
 )
 
-func TestPrint(t *testing.T) {
-	lineList := createListOfLines([]string{"first line", "second line"})
-	dotline = lineList.Front()
-
-	// to capture the output
-	var buff bytes.Buffer // implements io.Writer
-
-	_print(&buff, lineList)
-	if buff.String() != "first line\n" {
-		t.Fatalf("expected 'first line' but got %s", buff.String())
-	}
-	dotline = dotline.Next()
-	buff.Reset()
-	_print(&buff, lineList)
-	if buff.String() != "second line\n" {
-		t.Fatalf("expected 'second line' but got %s", buff.String())
-	}
-}
 func TestPrintRange(t *testing.T) {
-	lineList := createListOfLines([]string{"1", "2", "3", "4", "5"})
+	state := State{}
+	state.buffer = createListOfLines([]string{"1", "2", "3", "4", "5"})
+	state.lastLineNbr = 5
+	cmd := Command{AddressRange{Address{addr: 2}, Address{addr: 3}}, "p", ""}
 
 	// to capture the output
 	var buff bytes.Buffer // implements io.Writer
 
-	_printRange(&buff, lineList, AddressRange{Address{addr:2}, Address{addr:3}})
+	err := _printRange(&buff, cmd, &state)
+	if err != nil {
+		t.Fatalf("error %s", err)
+	}
 	if buff.String() != "2\n3\n" {
-		t.Fatalf("2,3p returned %s", buff.String())
+		t.Fatalf("2,3p returned '%s'", buff.String())
 	}
 
 	buff.Reset()
-	_printRange(&buff, lineList, AddressRange{Address{addr:1}, Address{addr:4}})
+	cmd = Command{AddressRange{Address{addr: 1}, Address{addr: 4}}, "p", ""}
+	err = _printRange(&buff, cmd, &state)
+	if err != nil {
+		t.Fatalf("error %s", err)
+	}
 	if buff.String() != "1\n2\n3\n4\n" {
-		t.Fatalf("1,4p returned %s", buff.String())
+		t.Fatalf("1,4p returned '%s'", buff.String())
 	}
 
 	buff.Reset()
-	_printRange(&buff, lineList, AddressRange{Address{addr:3}, Address{addr:3}})
+	cmd = Command{AddressRange{Address{addr: 3}, Address{addr: 3}}, "p", ""}
+	err = _printRange(&buff, cmd, &state)
+	if err != nil {
+		t.Fatalf("error %s", err)
+	}
 	if buff.String() != "3\n" {
-		t.Fatalf("3,3p returned %s", buff.String())
+		t.Fatalf("3,3p returned '%s'", buff.String())
 	}
 }
 
 func TestMoveToLine(t *testing.T) {
+	state := State{}
 	data := []string{"first", "second", "3", "", "5"}
-	lineList := createListOfLines(data)
 
-	for i, str := range data {
-		el, err := moveToLine(lineList, Address{addr:i+1})
-		if err != nil {
-			t.Fatalf("data element %d, got error: %s", i, err)
+	state.buffer = createListOfLines(data)
+
+	for i, expected := range data {
+		moveToLine(i+1, &state)
+		if state.lineNbr != (i + 1) {
+			t.Fatalf("bad state.lineNbr, expected %d but got %d", i+1, state.lineNbr)
 		}
-		if el.Value.(Line).line != str+"\n" {
-			t.Fatalf("bad data element %d, expected %s but got %s", i, str, el.Value.(Line).line)
+		if state.dotline.Value.(Line).line != expected+"\n" {
+			t.Fatalf("bad data element %d, expected '%s' but got '%s'", i, expected, state.dotline.Value.(Line).line)
 		}
 	}
 

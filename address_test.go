@@ -4,16 +4,21 @@ import (
 	"testing"
 )
 
-// expects an error 'badRange'
-func TestBadRange(t *testing.T) {
-	input := "2,1"
-	_, err := newRange(input)
-	if err != nil {
-		if err != &badRange {
-			t.Fatalf("error: %s (input string: %s)", err, input)
+// these ranges should throw errors (e.g. 'badRange')
+func TestErrors(t *testing.T) {
+	data := []struct {
+		addrRange string
+	}{
+		{"2,1"},
+		{"++5,$"},
+	}
+	for _, input := range data {
+		_, err := newRange(input.addrRange)
+		if err != nil {
+			// ok
+		} else {
+			t.Errorf("expected error for input string: %s", input)
 		}
-	} else {
-		t.Fatalf("expected error for input string: %s", input)
 	}
 }
 
@@ -27,9 +32,12 @@ func TestCreateRangeOffsets(t *testing.T) {
 		{"+,5", currentLine, 1, 5, 0},
 		{"-,+", currentLine, -1, currentLine, +1},
 		{"++,$", currentLine, 2, endOfFile, 0},
+		{"+ ++ +,$", currentLine, 4, endOfFile, 0},
 		{"---,9", currentLine, -3, 9, 0},
+		{"- --  -- ,9", currentLine, -5, 9, 0},
 		{"+3,-22", currentLine, 3, currentLine, -22},
 		{"-1,+2", currentLine, -1, currentLine, +2},
+		{"+ 3 , - 22", currentLine, 3, currentLine, -22},
 	}
 
 	for _, test := range data {
