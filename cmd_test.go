@@ -1,15 +1,54 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"testing"
 )
 
+func TestDelete(t *testing.T) {
+	state := State{}
+	state.buffer = createListOfLines([]string{"1", "2", "3", "4", "5"})
+	cmd := Command{AddressRange{Address{addr: 2}, Address{addr: 3}}, commandDelete, ""}
+
+	// to capture the output
+	var buff bytes.Buffer // implements io.Writer
+	var writer = bufio.NewWriter(&buff) // -> bufio
+
+	err := CmdDelete(cmd, &state)
+	if err != nil {
+		t.Fatalf("error %s", err)
+	}
+	if state.lineNbr != 2 {
+		t.Fatalf("wrong state.lineNbr! got %d, expected 2", state.lineNbr)
+	}
+	_, err = WriteWriter(writer, state.buffer.Front(), 1, state.buffer.Len())
+	if buff.String() != "1\n4\n5\n" {
+		t.Fatalf("2,3d returned '%s'", buff.String())
+	}
+
+   //  delete whole file
+	state.buffer = createListOfLines([]string{"1", "2", "3", "4", "5"})
+	cmd = Command{AddressRange{Address{addr: 1}, Address{addr: 5}}, commandDelete, ""}
+	buff.Reset()
+	err = CmdDelete(cmd, &state)
+	if err != nil {
+		t.Fatalf("error %s", err)
+	}
+	if state.lineNbr != 0 {
+		t.Fatalf("wrong state.lineNbr! got %d, expected 0", state.lineNbr)
+	}
+	_, err = WriteWriter(writer, state.buffer.Front(), 1, state.buffer.Len())
+	if buff.String() != "" {
+		t.Fatalf("1,5d returned '%s'", buff.String())
+	}
+
+}
+
 func TestPrintRange(t *testing.T) {
 	state := State{}
 	state.buffer = createListOfLines([]string{"1", "2", "3", "4", "5"})
-	state.lastLineNbr = 5
-	cmd := Command{AddressRange{Address{addr: 2}, Address{addr: 3}}, "p", ""}
+	cmd := Command{AddressRange{Address{addr: 2}, Address{addr: 3}}, commandPrint, ""}
 
 	// to capture the output
 	var buff bytes.Buffer // implements io.Writer
@@ -23,7 +62,7 @@ func TestPrintRange(t *testing.T) {
 	}
 
 	buff.Reset()
-	cmd = Command{AddressRange{Address{addr: 1}, Address{addr: 4}}, "p", ""}
+	cmd = Command{AddressRange{Address{addr: 1}, Address{addr: 4}}, commandPrint, ""}
 	err = _printRange(&buff, cmd, &state)
 	if err != nil {
 		t.Fatalf("error %s", err)
@@ -33,7 +72,7 @@ func TestPrintRange(t *testing.T) {
 	}
 
 	buff.Reset()
-	cmd = Command{AddressRange{Address{addr: 3}, Address{addr: 3}}, "p", ""}
+	cmd = Command{AddressRange{Address{addr: 3}, Address{addr: 3}}, commandPrint, ""}
 	err = _printRange(&buff, cmd, &state)
 	if err != nil {
 		t.Fatalf("error %s", err)

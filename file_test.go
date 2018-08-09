@@ -132,7 +132,7 @@ func createWriterAndDoTest(t *testing.T, listOfLines *list.List) {
 
 func doWriteTest(t *testing.T, myList *list.List, writer *bufio.Writer) (nbrBytesWritten int) {
 
-	nbrBytesWritten, err := WriteWriter(writer, myList)
+	nbrBytesWritten, err := WriteWriter(writer, myList.Front(), 1, myList.Len())
 	if err != nil {
 		t.Fatalf("Got error %v", err)
 	}

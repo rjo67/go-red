@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -15,21 +16,16 @@ const charDollar string = "$"
 const currentLine int = -1
 const endOfFile int = -2
 const startOfFile int = -3
+// if an address is not specified ...
+const notSpecified int = -4
 
 var _ = fmt.Printf // For debugging; delete when done.
 
-type AddressError struct {
-	desc string
-}
-
-func (e *AddressError) Error() string {
-	return e.desc
-}
-
-var invalidLine AddressError = AddressError{"invalid line in address range"}
-var unrecognisedRange AddressError = AddressError{"unrecognised address range"}
-var unrecognisedAddress AddressError = AddressError{"unrecognised address"}
-var badRange AddressError = AddressError{"address range start > end"}
+var invalidLine error = errors.New("invalid line in address range")
+var unrecognisedRange error = errors.New("unrecognised address range")
+var unrecognisedAddress error = errors.New("unrecognised address")
+var badRange error = errors.New("address range start > end")
+var rangeShouldNotBeSpecified error = errors.New("a range may not be specified")
 
 type Address struct {
 	addr   int
@@ -46,25 +42,26 @@ var /* const */ allMinusses = regexp.MustCompile("^\\s*[- ]+$")
 var /* const */ plusMinusN = regexp.MustCompile("^\\s*([\\+-])\\s*(\\d+)\\s*$")
 
 /*
- * Creates a new Address.
- * Special chars:
- *  An empty string  - currentLine
- *  .  currentLine
- *  $  last line
- *  +n
- *  -n
- *  +
- *  -
- *
- * TODO:
- *  marks
- *  regexps
+ Creates a new Address.
+
+ Special chars:
+   An empty string  - notSpecified (let caller decide)
+   .                - currentLine
+   $                - last line
+   +n
+    -n
+    +
+    -
+  
+ TODO:
+    marks
+    regexps
  */
 func newAddress(addrStr string) (Address, error) {
 	// handle special cases first
 	switch addrStr {
 	case "":
-		return Address{addr: currentLine}, nil // not always correct to default to current line
+		return Address{addr: notSpecified}, nil
 	case charDot:
 		return Address{addr: currentLine}, nil
 	case charDollar:
@@ -85,7 +82,7 @@ func newAddress(addrStr string) (Address, error) {
 			// last try: just a number
 			addrInt, err := strconv.Atoi(addrStr)
 			if err != nil {
-				return Address{}, &unrecognisedAddress
+				return Address{}, unrecognisedAddress
 			} else {
 				return Address{addr: addrInt}, nil
 			}
@@ -119,13 +116,13 @@ func handlePlusMinusNumber(addrStr string) (Address, error) {
 		case "+":
 			sign = 1
 		default:
-			return Address{}, &unrecognisedAddress
+			return Address{}, unrecognisedAddress
 		}
 		nbrStr := matches[0][2]
 		var nbr int
 		var err error
 		if nbrStr == "" { // if empty, throw error
-			return Address{}, &unrecognisedAddress
+			return Address{}, unrecognisedAddress
 		} else {
 			nbr, err = strconv.Atoi(nbrStr)
 			if err != nil {
@@ -134,7 +131,22 @@ func handlePlusMinusNumber(addrStr string) (Address, error) {
 		}
 		return Address{addr: currentLine, offset: nbr * sign}, nil
 	}
-	return Address{}, &unrecognisedAddress
+	return Address{}, unrecognisedAddress
+}
+
+/*
+ * Calculates both start and end line numbers from the given address range.
+ */
+func calculateStartAndEndLineNumbers(addrRange AddressRange, state *State) (startLine int, endLine int, err error) {
+	startLine, err = calculateActualLineNumber(addrRange.start, state)
+	if err != nil {
+		return 0, 0, err
+	}
+	endLine, err = calculateActualLineNumber(addrRange.end, state)
+	if err != nil {
+		return 0, 0, err
+	}
+	return startLine, endLine, nil
 }
 
 /*
@@ -153,15 +165,15 @@ func calculateActualLineNumber(address Address, state *State) (int, error) {
 		lineNbr = 1 + address.offset
 	case address.addr == endOfFile:
 		if address.offset > 0 {
-			return -1, &invalidLine
+			return -1, invalidLine
 		}
-		lineNbr = state.lastLineNbr + address.offset
+		lineNbr = state.buffer.Len() + address.offset
 	}
-	if lineNbr > state.lastLineNbr {
-		lineNbr = state.lastLineNbr
+	if lineNbr > state.buffer.Len() {
+		return -1, invalidLine
 	}
-	if lineNbr < 0 || lineNbr > state.lastLineNbr {
-		return -1, &invalidLine
+	if lineNbr < 0 || lineNbr > state.buffer.Len() {
+		return -1, invalidLine
 	} else {
 		return lineNbr, nil
 	}
@@ -172,9 +184,17 @@ type AddressRange struct {
 }
 
 /*
+ This function returns TRUE if the given address range contains valid values.
+ */
+func (ra *AddressRange) isAddressRangeSpecified() (bool) {
+	return ! (ra.start.addr == notSpecified && ra.end.addr == notSpecified)
+}
+
+/*
  * Creates an AddressRange from the given rangeStr string.
  * Special cases:
- *   empty string, .     {currentLine, currentLine}
+ *   empty string        {notSpecified, notSpecified}
+ *   .                   {currentLine, currentLine}
  *   $                   {endOfFile, endOfFile}
  *   ,                   {startOfFile, endOfFile}
  *   n                   {n, n}
@@ -185,7 +205,9 @@ type AddressRange struct {
  */
 func newRange(rangeStr string) (addrRange AddressRange, err error) {
 	// a few special cases to start with
-	if rangeStr == "" || rangeStr == charDot {
+	if rangeStr == "" {
+		return AddressRange{Address{addr: notSpecified}, Address{addr: notSpecified}}, nil
+	} else if rangeStr == charDot {
 		return AddressRange{Address{addr: currentLine}, Address{addr: currentLine}}, nil
 	} else if rangeStr == charDollar {
 		return AddressRange{Address{addr: endOfFile}, Address{addr: endOfFile}}, nil
@@ -207,7 +229,7 @@ func newRange(rangeStr string) (addrRange AddressRange, err error) {
 	matches := addrRangeRE.FindAllStringSubmatch(rangeStr, -1)
 	// we expect two matches
 	if len(matches) != 1 || len(matches[0]) != 3 {
-		return addrRange, &unrecognisedRange
+		return addrRange, unrecognisedRange
 	}
 
 	startRange := matches[0][1]
@@ -237,7 +259,7 @@ func newRange(rangeStr string) (addrRange AddressRange, err error) {
 
 	// start must be before end ('special' values excluded)
 	if start.addr >= 0 && end.addr >= 0 && start.addr > end.addr {
-		return addrRange, &badRange
+		return addrRange, badRange
 	}
 	return AddressRange{start, end}, nil
 }

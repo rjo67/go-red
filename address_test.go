@@ -62,7 +62,7 @@ func TestCreateRange(t *testing.T) {
 		addrRange                  string
 		expectedStart, expectedEnd int
 	}{
-		{"", currentLine, currentLine},
+		{"", notSpecified, notSpecified},
 		{"1,2", 1, 2},
 		{"99,999", 99, 999},
 		{"9,", 9, currentLine},
@@ -78,9 +78,9 @@ func TestCreateRange(t *testing.T) {
 	for _, test := range data {
 		r, err := newRange(test.addrRange)
 		if err != nil {
-			t.Errorf("error: %s (input string: %s)", err, test.addrRange)
+			t.Errorf("error: %s (input string: '%s')", err, test.addrRange)
 		} else if r.start.addr != test.expectedStart {
-			t.Errorf("bad start: %d, expected: %d (input string: %s)", r.start.addr, test.expectedStart, test.addrRange)
+			t.Errorf("bad start: %d, expected: %d (input string: '%s')", r.start.addr, test.expectedStart, test.addrRange)
 		} else if r.end.addr != test.expectedEnd {
 			t.Errorf("bad end: %d, expected: %d (input string: %s)", r.end.addr, test.expectedEnd, test.addrRange)
 		}
