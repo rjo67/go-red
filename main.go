@@ -10,6 +10,7 @@ import (
 )
 
 const unsavedChanges string = "buffer has unsaved changes"
+
 /**
  * Stores information about a line.
  * The line number is not stored, this is implicit.
@@ -19,16 +20,13 @@ type Line struct {
 }
 
 type State struct {
-	// the current buffer -- should never be null
 	// the last line number is accessible via buffer.Len()
-	buffer *list.List
-	// the current (dot) line -- can be null
-	dotline *list.Element
-	// the current line number
-	lineNbr int
-	// whether the buffer has been changed since the last write
-	changedSinceLastWrite bool
+	buffer                *list.List    // the current buffer -- should never be null
+	dotline               *list.Element // the current (dot) line -- can be null
+	lineNbr               int           // the current line number
+	changedSinceLastWrite bool          // whether the buffer has been changed since the last write
 	defaultFilename       string
+	windowSize            int // window size - for scroll command
 
 	// program flags
 	debug      bool // debugging activated?
@@ -48,6 +46,8 @@ func main() {
 	if state.prompt != "" {
 		state.showPrompt = true
 	}
+
+	state.windowSize = 15 // see https://stackoverflow.com/a/48610796 for a better way...
 
 	mainloop(state)
 }
@@ -127,7 +127,7 @@ func mainloop(state State) {
 							quit = true
 						}
 					case commandRead:
-						fmt.Println("not yet implemented")
+						err = CmdRead(cmd, &state)
 					case commandSubstitute:
 						fmt.Println("not yet implemented")
 					case commandTransfer:
@@ -148,7 +148,7 @@ func mainloop(state State) {
 					case commandYank:
 						fmt.Println("not yet implemented")
 					case commandScroll:
-						fmt.Println("not yet implemented")
+						err = CmdScroll(cmd, &state)
 					case commandComment:
 						fmt.Println("not yet implemented")
 					case commandNoCommand:

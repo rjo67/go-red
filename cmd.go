@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -49,6 +50,7 @@ const commandNoCommand string = ""
 
 var unrecognisedCommand error = errors.New("unrecognised command")
 var missingFilename error = errors.New("filename missing and no default set")
+var invalidWindowSize error = errors.New("invalid window size")
 
 var justNumberRE = regexp.MustCompile("^\\s*(\\d*)\\s*$")
 var commandLineRE = regexp.MustCompile("(.*?)([acdeEfgGijklmnpPqQrstuvVwWxyz#=])(.*)")
@@ -69,8 +71,8 @@ func ParseCommand(str string) (cmd Command, err error) {
 		if err != nil {
 			return Command{}, err
 		} else {
-		return Command{addrRange, commandPrint, ""}, nil
-	}
+			return Command{addrRange, commandPrint, ""}, nil
+		}
 	}
 	// check for a number <n> --> equivalent to <n>p
 	matches := justNumberRE.FindStringSubmatch(str)
@@ -137,15 +139,29 @@ func CmdAppendInsert(cmd Command, state *State) error {
 		if cmd.cmd == commandInsert {
 			lineNbr--
 		}
-		moveToLine(lineNbr, state)
-		mark := state.dotline
-		for e := newLines.Front(); e != nil; e = e.Next() {
-			mark = state.buffer.InsertAfter(e.Value, mark)
-		}
-		moveToLine(lineNbr+nbrLinesEntered, state)
+		appendLines(lineNbr, state, newLines)
 	}
 
 	return nil
+}
+
+/*
+ Appends the lines in the list 'newLines' to the current buffer, after line #lineNbr.
+
+ Afterwards, the state's current line will be set to the last of the new lines just appended.
+*/
+func appendLines(lineNbr int, state *State, newLines *list.List) {
+	if lineNbr < 1 {
+		panic(fmt.Sprintf("bad lineNbr: %d", lineNbr))
+	}
+	moveToLine(lineNbr, state)
+	nbrLinesEntered := 0
+	mark := state.dotline
+	for e := newLines.Front(); e != nil; e = e.Next() {
+		mark = state.buffer.InsertAfter(e.Value, mark)
+		nbrLinesEntered++
+	}
+	moveToLine(lineNbr+nbrLinesEntered, state)
 }
 
 /*
@@ -207,13 +223,13 @@ func readInputLines() (newLines *list.List, nbrLinesEntered int, err error) {
 }
 
 /*
- * Edits file, and sets the default filename.
- * If file is not specified, then the default filename is used.
- * Any lines in the buffer are deleted before the new file is read.
- * The current address is set to the address of the last line in the buffer.
- */
+  Edits file, and sets the default filename.
+  If file is not specified, then the default filename is used.
+  Any lines in the buffer are deleted before the new file is read.
+  The current address is set to the address of the last line in the buffer.
+*/
 func CmdEdit(cmd Command, state *State) error {
-	filename, err := getFilename(strings.TrimSpace(cmd.restOfCmd), state)
+	filename, err := getFilename(strings.TrimSpace(cmd.restOfCmd), state, true)
 	if err != nil {
 		return err
 	}
@@ -229,12 +245,65 @@ func CmdEdit(cmd Command, state *State) error {
 }
 
 /*
- if potentialFilename is set, returns this having set the state.defaultFilename as well.
- Otherwise, returns the state.defaultFilename
+ Reads file and appends it after the addressed line.
+
+ If file is not specified, then the default filename is used.
+ If there is no default filename prior to the command, then the default filename is set to file.
+ Otherwise, the default filename is unchanged.
+
+ The address '0' (zero) is valid for this command; it reads the file at the beginning of the buffer.
+
+ The current address is set to the address of the last line read or, if there were none, to the addressed line.
+*/
+func CmdRead(cmd Command, state *State) error {
+	filename, err := getFilename(strings.TrimSpace(cmd.restOfCmd), state, false)
+	if err != nil {
+		return err
+	}
+	var startLineNbr int
+	// default is append at eof
+	if !cmd.addrRange.isAddressRangeSpecified() {
+		startLineNbr = state.buffer.Len()
+	} else {
+		startLineNbr, err = calculateActualLineNumber(cmd.addrRange.start, state)
+		if err != nil {
+			return err
+		}
+	}
+	nbrBytesRead, listOfLines, err := ReadFile(filename)
+	if err != nil {
+		return err
+	}
+	fmt.Println(nbrBytesRead)
+	nbrLinesRead := listOfLines.Len()
+	if nbrLinesRead > 0 {
+		if startLineNbr == state.buffer.Len() {
+			// append at end
+			state.buffer.PushBackList(listOfLines)
+			moveToLine(state.buffer.Len(), state)
+		} else if startLineNbr == 0 {
+			// append at start
+			state.buffer.PushFrontList(listOfLines)
+			moveToLine(nbrLinesRead, state)
+		} else {
+			appendLines(startLineNbr, state, listOfLines)
+		}
+		state.changedSinceLastWrite = true
+	} else {
+		moveToLine(startLineNbr, state)
+	}
+	return nil
+}
+
+/*
+ If potentialFilename is set, returns this. If setDefault is TRUE, the state.defaultFilename will
+ be set to this filename.
+
+ Otherwise, returns the state.defaultFilename.
 
  It is an error if both potentialFilename and state.defaultFilename are empty.
- */
-func getFilename(potentialFilename string, state *State) (filename string, err error) {
+*/
+func getFilename(potentialFilename string, state *State, setDefault bool) (filename string, err error) {
 	if potentialFilename == "" {
 		// use default if set
 		if state.defaultFilename != "" {
@@ -244,7 +313,9 @@ func getFilename(potentialFilename string, state *State) (filename string, err e
 		}
 	} else {
 		filename = potentialFilename
-		state.defaultFilename = potentialFilename
+		if setDefault {
+			state.defaultFilename = potentialFilename
+		}
 	}
 	return filename, nil
 }
@@ -254,30 +325,35 @@ func getFilename(potentialFilename string, state *State) (filename string, err e
 
  Writes (or appends in case of W) the addressed lines to file.
  Any previous contents of file is lost without warning.
- 
+
  If there is no default filename, then the default filename is set to file, otherwise it is unchanged.
  If no filename is specified, then the default filename is used.
- 
- The current address is unchanged. 
+
+ The current address is unchanged.
 
  In case of 'wq': a quit is performed immediately afterwards. (This is handled by the caller.)
- */
+*/
 func CmdWrite(cmd Command, state *State) error {
 	// save current address
 	currentLine := state.lineNbr
 
 	// handle command sequence 'wq'
 	filename := strings.TrimPrefix(cmd.restOfCmd, commandQuit)
-	filename, err := getFilename(strings.TrimSpace(filename), state)
+	filename, err := getFilename(strings.TrimSpace(filename), state, true)
 	if err != nil {
 		return err
 	}
 
-	startLineNbr, endLineNbr, err := calculateStartAndEndLineNumbers(cmd.addrRange, state)
-	if err != nil {
-		return err
+	var startLineNbr, endLineNbr int
+	if !cmd.addrRange.isAddressRangeSpecified() {
+		startLineNbr = 1
+		endLineNbr = state.buffer.Len()
+	} else {
+		startLineNbr, endLineNbr, err = calculateStartAndEndLineNumbers(cmd.addrRange, state)
+		if err != nil {
+			return err
+		}
 	}
-	fmt.Printf("start: %d, end: %d, range: %v\n", startLineNbr, endLineNbr, cmd.addrRange)
 	// disallow 0
 	if startLineNbr == 0 {
 		return invalidLine
@@ -297,7 +373,52 @@ func CmdWrite(cmd Command, state *State) error {
  * Prints the addressed lines. The current address is set to the address of the last line printed.
  */
 func CmdPrint(cmd Command, state *State) error {
-	return _printRange(os.Stdout, cmd, state)
+	return _printRange(os.Stdout, cmd, state, false)
+}
+
+/*
+ Scrolls n lines at a time starting at addressed line, and sets window size to n.
+ The current address is set to the address of the last line printed.
+
+ If n is not specified, then the current window size is used.
+
+ Window size defaults to screen size minus two lines, or to 22 if screen size can't be determined.
+*/
+func CmdScroll(cmd Command, state *State) error {
+	var startLineNbr, endLineNbr int
+	var err error
+	if !cmd.addrRange.isAddressRangeSpecified() {
+		startLineNbr = state.lineNbr + 1
+	} else {
+		startLineNbr, err = calculateActualLineNumber(cmd.addrRange.start, state)
+		if err != nil {
+			return err
+		}
+	}
+	// check for 'z<n>'
+	if cmd.restOfCmd != "" {
+		// parse to number if possible
+		newWindowSize, err := strconv.Atoi(strings.TrimSpace(cmd.restOfCmd))
+		if err != nil || newWindowSize < 1 {
+			return invalidWindowSize
+		}
+		state.windowSize = newWindowSize
+	}
+	endLineNbr = startLineNbr + state.windowSize
+	// sanitize
+	if startLineNbr == 0 {
+		startLineNbr = 1
+	}
+	if startLineNbr > state.buffer.Len() {
+		startLineNbr = state.buffer.Len()
+	}
+	if endLineNbr > state.buffer.Len() {
+		endLineNbr = state.buffer.Len()
+	}
+	startAddr := Address{startLineNbr, 0}
+	endAddr := Address{endLineNbr, 0}
+	cmd.addrRange = AddressRange{startAddr, endAddr}
+	return _printRange(os.Stdout, cmd, state, true)
 }
 
 /*
@@ -305,10 +426,10 @@ func CmdPrint(cmd Command, state *State) error {
  * The current address is set to the address of the last line printed.
  */
 func CmdNumber(cmd Command, state *State) error {
-	return _printRange(os.Stdout, cmd, state)
+	return _printRange(os.Stdout, cmd, state, true)
 }
 
-func _printRange(writer io.Writer, cmd Command, state *State) error {
+func _printRange(writer io.Writer, cmd Command, state *State, printLineNumbers bool) error {
 	startLineNbr, endLineNbr, err := calculateStartAndEndLineNumbers(cmd.addrRange, state)
 	if err != nil {
 		return err
@@ -329,20 +450,20 @@ func _printRange(writer io.Writer, cmd Command, state *State) error {
 	el := state.dotline
 	prevEl := el
 	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr++ {
-		if cmd.cmd == commandNumber {
+		if printLineNumbers {
 			fmt.Fprintf(writer, "%4d%c %s", lineNbr, '\t', el.Value.(Line).line)
 		} else {
 			fmt.Fprintf(writer, el.Value.(Line).line)
 		}
-		prevEl  = el // store el, to be able to set dotline i/c we hit the end of the list
+		prevEl = el // store el, to be able to set dotline i/c we hit the end of the list
 		el = el.Next()
 	}
 	// set dotline
 	if el != nil {
-	state.dotline = el
-} else {
-	state.dotline = prevEl
-}
+		state.dotline = el
+	} else {
+		state.dotline = prevEl
+	}
 	state.lineNbr = endLineNbr
 	return nil
 }
