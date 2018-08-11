@@ -22,6 +22,7 @@ type Line struct {
 type State struct {
 	// the last line number is accessible via buffer.Len()
 	buffer                *list.List    // the current buffer -- should never be null
+	cutBuffer             *list.List   // the cut buffer, set by commands c, d, j, s or y
 	dotline               *list.Element // the current (dot) line -- can be null
 	lineNbr               int           // the current line number
 	changedSinceLastWrite bool          // whether the buffer has been changed since the last write
@@ -37,6 +38,7 @@ type State struct {
 func main() {
 	state := State{}
 	state.buffer = list.New()
+	state.cutBuffer = list.New()
 
 	flag.BoolVar(&state.debug, "d", false, "debug mode")
 	// default is set to true
@@ -87,19 +89,19 @@ func mainloop(state State) {
 				if err == nil {
 					switch cmd.cmd {
 					case commandAppend, commandInsert:
-						err = CmdAppendInsert(cmd, &state)
+						err = cmd.CmdAppendInsert(&state)
 					case commandChange:
-						fmt.Println("not yet implemented")
+						err = cmd.CmdChange(&state)
 					case commandDelete:
-						err = CmdDelete(cmd, &state)
+						err = cmd.CmdDelete(&state)
 					case commandEdit:
 						if state.changedSinceLastWrite {
 							fmt.Println(unsavedChanges)
 						} else {
-							err = CmdEdit(cmd, &state)
+							err = cmd.CmdEdit(&state)
 						}
 					case commandEditUnconditionally:
-						err = CmdEdit(cmd, &state)
+						err = cmd.CmdEdit(&state)
 					case commandFilename:
 						state.defaultFilename = strings.TrimSpace(cmd.restOfCmd)
 					case commandGlobal:
@@ -107,17 +109,17 @@ func mainloop(state State) {
 					case commandGlobalInteractive:
 						fmt.Println("not yet implemented")
 					case commandJoin:
-						fmt.Println("not yet implemented")
+						err = cmd.CmdJoin(&state)
 					case commandMark:
 						fmt.Println("not yet implemented")
 					case commandList:
 						fmt.Println("not yet implemented")
 					case commandMove:
-						fmt.Println("not yet implemented")
+						err = cmd.CmdMove(&state)
 					case commandNumber:
-						err = CmdNumber(cmd, &state)
+						err = cmd.CmdNumber(&state)
 					case commandPrint:
-						err = CmdPrint(cmd, &state)
+						err = cmd.CmdPrint(&state)
 					case commandPrompt:
 						state.showPrompt = !state.showPrompt
 					case commandQuit, commandQuitUnconditionally:
@@ -127,11 +129,11 @@ func mainloop(state State) {
 							quit = true
 						}
 					case commandRead:
-						err = CmdRead(cmd, &state)
+						err = cmd.CmdRead(&state)
 					case commandSubstitute:
 						fmt.Println("not yet implemented")
 					case commandTransfer:
-						fmt.Println("not yet implemented")
+						err = cmd.CmdTransfer(&state)
 					case commandUndo:
 						fmt.Println("not yet implemented")
 					case commandInverseGlobal:
@@ -139,18 +141,20 @@ func mainloop(state State) {
 					case commandInverseGlobalInteractive:
 						fmt.Println("not yet implemented")
 					case commandWrite:
-						err = CmdWrite(cmd, &state)
+						err = cmd.CmdWrite(&state)
 						quit = (cmd.cmd == commandWrite && strings.HasPrefix(cmd.restOfCmd, commandQuit))
 					case commandWriteAppend:
 						fmt.Println("not yet implemented")
 					case commandPut:
-						fmt.Println("not yet implemented")
+						err = cmd.CmdPut(&state)
 					case commandYank:
-						fmt.Println("not yet implemented")
+						err = cmd.CmdYank(&state)
 					case commandScroll:
-						err = CmdScroll(cmd, &state)
+						err = cmd.CmdScroll(&state)
 					case commandComment:
 						fmt.Println("not yet implemented")
+					case commandLinenumber:
+						err = cmd.CmdLinenumber(&state)
 					case commandNoCommand:
 						// nothing entered -- ignore
 					default:
@@ -162,7 +166,7 @@ func mainloop(state State) {
 					fmt.Printf("error: %s\n", err)
 				}
 				if state.debug {
-					fmt.Printf("state: %+v, buffer length: %d\n", state, state.buffer.Len())
+					fmt.Printf("state: %+v, buffer len: %d, cut buffer len %d\n", state, state.buffer.Len(), state.cutBuffer.Len())
 				}
 			}
 		}

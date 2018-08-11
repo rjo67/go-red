@@ -22,6 +22,7 @@ const notSpecified int = -4
 var _ = fmt.Printf // For debugging; delete when done.
 
 var invalidLine error = errors.New("invalid line in address range")
+var invalidDestinationAddress error = errors.New("invalid line for destination")
 var unrecognisedRange error = errors.New("unrecognised address range")
 var unrecognisedAddress error = errors.New("unrecognised address")
 var badRange error = errors.New("address range start > end")
@@ -186,7 +187,7 @@ type AddressRange struct {
 /*
  This function returns TRUE if the given address range contains valid values.
  */
-func (ra *AddressRange) isAddressRangeSpecified() (bool) {
+func (ra AddressRange) isAddressRangeSpecified() (bool) {
 	return ! (ra.start.addr == notSpecified && ra.end.addr == notSpecified)
 }
 

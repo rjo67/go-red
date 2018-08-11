@@ -115,7 +115,7 @@ func ParseCommand(str string) (cmd Command, err error) {
  * The current address is set to the address of the last line entered or,
  * if there were none, to the addressed line.
  */
-func CmdAppendInsert(cmd Command, state *State) error {
+func (cmd Command) CmdAppendInsert(state *State) error {
 	// calc required line (checks if this is a valid line)
 	lineNbr, err := calculateActualLineNumber(cmd.addrRange.start, state)
 	if err != nil {
@@ -146,33 +146,157 @@ func CmdAppendInsert(cmd Command, state *State) error {
 }
 
 /*
- Appends the lines in the list 'newLines' to the current buffer, after line #lineNbr.
+ Changes lines in the buffer.
 
- Afterwards, the state's current line will be set to the last of the new lines just appended.
+ The addressed lines are deleted from the buffer, and text is inserted in their place.
+
+ The current address is set to the address of the last line entered or, if there were none,
+ to the new address of the line after the last line deleted;
+ if the lines deleted were originally at the end of the buffer,
+ the current address is set to the address of the new last line;
+ if no lines remain in the buffer, the current address is set to zero.
 */
-func appendLines(lineNbr int, state *State, newLines *list.List) {
-	if lineNbr < 1 {
-		panic(fmt.Sprintf("bad lineNbr: %d", lineNbr))
+func (cmd Command) CmdChange(state *State) error {
+
+	startLineNbr, err := calculateActualLineNumber(cmd.addrRange.start, state)
+	if err != nil {
+		return err
 	}
-	moveToLine(lineNbr, state)
-	nbrLinesEntered := 0
-	mark := state.dotline
-	for e := newLines.Front(); e != nil; e = e.Next() {
-		mark = state.buffer.InsertAfter(e.Value, mark)
-		nbrLinesEntered++
+	if startLineNbr == 0 {
+		return invalidLine
 	}
-	moveToLine(lineNbr+nbrLinesEntered, state)
+
+	// delete the lines
+	deleteCmd := Command{cmd.addrRange, commandDelete, cmd.restOfCmd}
+	deleteCmd.CmdDelete(state)
+
+	var atEof bool
+
+	// adjust the starting lineNbr if we've deleted at the end of the file
+	if startLineNbr > state.buffer.Len() {
+		startLineNbr = state.buffer.Len()
+		atEof = true
+	}
+
+	newLines, nbrLinesEntered, err := readInputLines()
+	if nbrLinesEntered == 0 {
+		return nil
+	}
+	state.changedSinceLastWrite = true
+
+	if atEof {
+		appendLines(startLineNbr, state, newLines)
+	} else {
+		appendLines(startLineNbr-1, state, newLines)
+	}
+
+	return nil
 }
 
 /*
- * Deletes the addressed lines from the buffer.
- *
- * The current address is set to the new address of the line after the last line deleted;
- * if the lines deleted were originally at the end of the buffer,
- * the current address is set to the address of the new last line;
- * if no lines remain in the buffer, the current address is set to zero.
- */
-func CmdDelete(cmd Command, state *State) error {
+ Appends the lines in the list 'newLines' to the current buffer, after line #lineNbr.
+
+ Afterwards, the state's current line will be set to the last of the new lines just appended.
+
+ Special cases:
+   - appending at the last line
+	- appending at "line 0" i.e. before the first line
+*/
+func appendLines(lineNbr int, state *State, newLines *list.List) {
+	// return if newLines is empty
+	if newLines.Len() == 0 {
+		return
+	}
+	if lineNbr == state.buffer.Len() {
+		// append at end
+		state.buffer.PushBackList(newLines)
+		moveToLine(state.buffer.Len(), state)
+	} else if lineNbr == 0 {
+		// append at start
+		state.buffer.PushFrontList(newLines)
+		moveToLine(newLines.Len(), state)
+	} else {
+		moveToLine(lineNbr, state)
+		nbrLinesEntered := 0
+		mark := state.dotline
+		for e := newLines.Front(); e != nil; e = e.Next() {
+			mark = state.buffer.InsertAfter(e.Value, mark)
+			nbrLinesEntered++
+		}
+		moveToLine(lineNbr+nbrLinesEntered, state)
+	}
+}
+
+/*
+ Copies (yanks) the addressed lines to the cut buffer.
+
+ The cut buffer is overwritten by subsequent 'c', 'd', 'j', 's', or 'y' commands.
+ The current address is unchanged.
+*/
+func (cmd Command) CmdYank(state *State) error {
+	currentAddress := state.lineNbr // save for later
+	var startLineNbr, endLineNbr int
+	var err error
+	if !cmd.addrRange.isAddressRangeSpecified() {
+		startLineNbr = state.lineNbr
+		endLineNbr = state.lineNbr
+	} else {
+		startLineNbr, endLineNbr, err = calculateStartAndEndLineNumbers(cmd.addrRange, state)
+	}
+	if err != nil {
+		return err
+	}
+	if startLineNbr == 0 {
+		return invalidLine
+	}
+
+	state.cutBuffer = copyLines(startLineNbr, endLineNbr, state)
+	moveToLine(currentAddress, state)
+	return nil
+}
+
+/*
+ Copies the required lines into a new list.
+*/
+func copyLines(startLineNbr, endLineNbr int, state *State) (*list.List) {
+	moveToLine(startLineNbr, state)
+	tempBuffer := list.New()
+	el := state.dotline
+	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr++ {
+		element := el
+		el = el.Next()
+		tempBuffer.PushBack(element.Value)
+	}
+	return tempBuffer
+}
+
+/*
+ Deletes the required lines from the state.buffer and returns them as a new list.
+*/
+func deleteLines(startLineNbr, endLineNbr int, state *State) (newList *list.List) {
+	moveToLine(startLineNbr, state)
+	tempBuffer := list.New()
+	el := state.dotline
+	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr++ {
+		elementToDelete := el
+		el = el.Next()
+		state.buffer.Remove(elementToDelete)
+		tempBuffer.PushBack(elementToDelete.Value)
+	}
+	return tempBuffer
+}
+
+/*
+ Deletes the addressed lines from the buffer.
+
+ The current address is set to the new address of the line after the last line deleted;
+ if the lines deleted were originally at the end of the buffer,
+   the current address is set to the address of the new last line;
+ if no lines remain in the buffer, the current address is set to zero.
+
+ Deleted lines are stored in the state.cutBuffer.
+*/
+func (cmd Command) CmdDelete(state *State) error {
 	startLineNbr, endLineNbr, err := calculateStartAndEndLineNumbers(cmd.addrRange, state)
 	if err != nil {
 		return err
@@ -180,14 +304,16 @@ func CmdDelete(cmd Command, state *State) error {
 	if startLineNbr == 0 {
 		return invalidLine
 	}
-	moveToLine(startLineNbr, state)
 
-	el := state.dotline
-	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr++ {
-		elementToDelete := el
-		el = el.Next()
-		state.buffer.Remove(elementToDelete)
+	tempBuffer := deleteLines(startLineNbr, endLineNbr, state)
+
+	if tempBuffer.Len() == 0 {
+		return nil
 	}
+
+	state.cutBuffer = tempBuffer
+	state.changedSinceLastWrite = true
+
 	newLineNbr := startLineNbr
 	bufferLen := state.buffer.Len()
 	if bufferLen == 0 {
@@ -223,12 +349,26 @@ func readInputLines() (newLines *list.List, nbrLinesEntered int, err error) {
 }
 
 /*
+ Prints the line number of the addressed line.
+
+ The current address is unchanged.
+*/
+func (cmd Command) CmdLinenumber(state *State) error {
+	startLineNbr, err := calculateActualLineNumber(cmd.addrRange.start, state)
+	if err != nil {
+		return err
+	}
+	fmt.Println(startLineNbr)
+	return nil
+}
+
+/*
   Edits file, and sets the default filename.
   If file is not specified, then the default filename is used.
   Any lines in the buffer are deleted before the new file is read.
   The current address is set to the address of the last line in the buffer.
 */
-func CmdEdit(cmd Command, state *State) error {
+func (cmd Command) CmdEdit(state *State) error {
 	filename, err := getFilename(strings.TrimSpace(cmd.restOfCmd), state, true)
 	if err != nil {
 		return err
@@ -237,7 +377,7 @@ func CmdEdit(cmd Command, state *State) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(nbrBytesRead)
+	fmt.Printf("%dL, %dC\n", listOfLines.Len(), nbrBytesRead)
 	state.buffer = listOfLines
 	state.changedSinceLastWrite = false
 	moveToLine(state.buffer.Len(), state)
@@ -255,7 +395,7 @@ func CmdEdit(cmd Command, state *State) error {
 
  The current address is set to the address of the last line read or, if there were none, to the addressed line.
 */
-func CmdRead(cmd Command, state *State) error {
+func (cmd Command) CmdRead(state *State) error {
 	filename, err := getFilename(strings.TrimSpace(cmd.restOfCmd), state, false)
 	if err != nil {
 		return err
@@ -277,20 +417,179 @@ func CmdRead(cmd Command, state *State) error {
 	fmt.Println(nbrBytesRead)
 	nbrLinesRead := listOfLines.Len()
 	if nbrLinesRead > 0 {
-		if startLineNbr == state.buffer.Len() {
-			// append at end
-			state.buffer.PushBackList(listOfLines)
-			moveToLine(state.buffer.Len(), state)
-		} else if startLineNbr == 0 {
-			// append at start
-			state.buffer.PushFrontList(listOfLines)
-			moveToLine(nbrLinesRead, state)
-		} else {
-			appendLines(startLineNbr, state, listOfLines)
-		}
+		appendLines(startLineNbr, state, listOfLines)
 		state.changedSinceLastWrite = true
 	} else {
 		moveToLine(startLineNbr, state)
+	}
+	return nil
+}
+
+/*
+ Joins the addressed lines, replacing them by a single line containing their joined text.
+ 
+ If only one address is given, this command does nothing.
+ 
+ If lines are joined, the current address is set to the address of the joined line.
+ Else, the current address is unchanged.
+*/
+func (cmd Command) CmdJoin(state *State) error {
+	var startLineNbr, endLineNbr int
+	var err error
+
+	if !cmd.addrRange.isAddressRangeSpecified() {
+		return nil
+	} else {
+		if startLineNbr, endLineNbr, err = calculateStartAndEndLineNumbers(cmd.addrRange, state); err != nil {
+			return err
+		}
+	}
+	moveToLine(startLineNbr, state)
+	var sb strings.Builder
+	el := state.dotline
+	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr ++ {
+		line := el.Value.(Line).line
+		// replace the newline with a space
+		sb.WriteString(strings.Replace(line, "\n", " ", 1))
+		el = el.Next()
+	}
+	// add newline again
+	sb.WriteString("\n")
+
+	// delete the lines (and set cutbuffer)
+	deleteCmd := Command{cmd.addrRange, commandDelete, cmd.restOfCmd}
+	deleteCmd.CmdDelete(state)
+
+	// append the string buffer at line <startLineNbr - 1> with the string buffer
+	newLines := list.New()
+	newLines.PushBack(Line{sb.String()})
+
+	appendLines(startLineNbr - 1, state, newLines)
+	return nil
+}
+
+/*
+ Moves lines in the buffer.
+ 
+ The addressed lines are moved to after the right-hand destination address.
+ The destination address '0' (zero) is valid for this command;
+    it moves the addressed lines to the beginning of the buffer.
+
+ It is an error if the destination address falls within the range of moved lines.
+ 
+ The current address is set to the new address of the last line moved.
+*/
+func (cmd Command) CmdMove(state *State) error {
+	var startLineNbr, endLineNbr int
+	var err error
+	// default is current line (for both start/end, and dest)
+	if !cmd.addrRange.isAddressRangeSpecified() {
+		startLineNbr = state.lineNbr
+		endLineNbr = state.lineNbr
+	} else {
+		if startLineNbr, endLineNbr, err = calculateStartAndEndLineNumbers(cmd.addrRange, state); err != nil {
+			return err
+		}
+	}
+	var destLineNbr int
+	// default is current line for destination
+	if destStr := strings.TrimSpace(cmd.restOfCmd); destStr == "" {
+		destLineNbr = state.lineNbr
+	} else {
+		var destLine Address
+	 	if destLine, err = newAddress(destStr); err != nil {
+			return invalidDestinationAddress
+		}
+		if destLineNbr, err = calculateActualLineNumber(destLine, state); err != nil {
+			return err
+		}
+	}
+	if startLineNbr == 0 {
+		return invalidDestinationAddress
+	}
+	if destLineNbr > state.buffer.Len() {
+		return invalidDestinationAddress
+	}
+	// it is an error if the destination address falls within the range of moved lines
+	if destLineNbr >= startLineNbr && destLineNbr < endLineNbr {
+		return invalidDestinationAddress
+	}
+
+   // delete the lines
+	tempBuffer := deleteLines(startLineNbr, endLineNbr, state)
+	if tempBuffer.Len() == 0 {
+		return nil
+	}
+
+	// adjust destination line number if it has been affected by the delete
+	if destLineNbr >= startLineNbr {
+		destLineNbr -= (endLineNbr - startLineNbr + 1)
+	}
+
+	appendLines(destLineNbr, state, tempBuffer)
+	state.changedSinceLastWrite = true
+	return nil
+}
+
+/*
+ Copies (i.e., transfers) the addressed lines to after the right-hand destination address.
+ 
+ If the destination address is 0, the lines are copied at the beginning of the buffer.
+ 
+ The current address is set to the address of the last line copied.
+*/
+func (cmd Command) CmdTransfer(state *State) error {
+	var startLineNbr, endLineNbr int
+	var err error
+	// default is current line (for start and end)
+	if !cmd.addrRange.isAddressRangeSpecified() {
+		startLineNbr = state.lineNbr
+		endLineNbr = state.lineNbr
+	} else {
+		if startLineNbr, endLineNbr, err = calculateStartAndEndLineNumbers(cmd.addrRange, state); err != nil {
+			return err
+		}
+	}
+	var destLineNbr int
+	// default is current line for destination
+	if destStr := strings.TrimSpace(cmd.restOfCmd); destStr == "" {
+		destLineNbr = state.lineNbr
+	} else {
+		var destLine Address
+	 	if destLine, err = newAddress(destStr); err != nil {
+			return invalidDestinationAddress
+		}
+		if destLineNbr, err = calculateActualLineNumber(destLine, state); err != nil {
+			return err
+		}
+	}
+	if destLineNbr > state.buffer.Len() {
+		return invalidDestinationAddress
+	}
+	tempBuffer := copyLines(startLineNbr, endLineNbr, state)
+	appendLines(destLineNbr, state, tempBuffer)
+	state.changedSinceLastWrite = true
+	return nil
+}
+
+/*
+ Copies (puts) the contents of the cut buffer to after the addressed line.
+ The current address is set to the address of the last line copied.
+*/
+func (cmd Command) CmdPut(state *State) error {
+	var startLineNbr int
+	var err error
+	// default is append at current line
+	if !cmd.addrRange.isAddressRangeSpecified() {
+		startLineNbr = state.lineNbr
+	} else {
+		if startLineNbr, err = calculateActualLineNumber(cmd.addrRange.start, state); err != nil {
+			return err
+		}
+	}
+	nbrLines := state.cutBuffer.Len()
+	if nbrLines > 0 {
+		appendLines(startLineNbr, state, state.cutBuffer)
 	}
 	return nil
 }
@@ -333,7 +632,7 @@ func getFilename(potentialFilename string, state *State, setDefault bool) (filen
 
  In case of 'wq': a quit is performed immediately afterwards. (This is handled by the caller.)
 */
-func CmdWrite(cmd Command, state *State) error {
+func (cmd Command) CmdWrite(state *State) error {
 	// save current address
 	currentLine := state.lineNbr
 
@@ -363,7 +662,7 @@ func CmdWrite(cmd Command, state *State) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(nbrBytesWritten)
+	fmt.Printf("%dC\n", nbrBytesWritten)
 	state.changedSinceLastWrite = false
 	moveToLine(currentLine, state)
 	return nil
@@ -372,7 +671,7 @@ func CmdWrite(cmd Command, state *State) error {
 /*
  * Prints the addressed lines. The current address is set to the address of the last line printed.
  */
-func CmdPrint(cmd Command, state *State) error {
+func (cmd Command) CmdPrint(state *State) error {
 	return _printRange(os.Stdout, cmd, state, false)
 }
 
@@ -384,7 +683,7 @@ func CmdPrint(cmd Command, state *State) error {
 
  Window size defaults to screen size minus two lines, or to 22 if screen size can't be determined.
 */
-func CmdScroll(cmd Command, state *State) error {
+func (cmd Command) CmdScroll(state *State) error {
 	var startLineNbr, endLineNbr int
 	var err error
 	if !cmd.addrRange.isAddressRangeSpecified() {
@@ -425,7 +724,7 @@ func CmdScroll(cmd Command, state *State) error {
  * Prints the addressed lines, preceding each line by its line number and a <tab>.
  * The current address is set to the address of the last line printed.
  */
-func CmdNumber(cmd Command, state *State) error {
+func (cmd Command) CmdNumber(state *State) error {
 	return _printRange(os.Stdout, cmd, state, true)
 }
 
