@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -21,11 +22,15 @@ type Line struct {
 
 type State struct {
 	// the last line number is accessible via buffer.Len()
-	buffer                *list.List    // the current buffer -- should never be null
-	cutBuffer             *list.List   // the cut buffer, set by commands c, d, j, s or y
-	dotline               *list.Element // the current (dot) line -- can be null
-	lineNbr               int           // the current line number
-	changedSinceLastWrite bool          // whether the buffer has been changed since the last write
+	buffer                *list.List     // the current buffer -- should never be null
+	cutBuffer             *list.List     // the cut buffer, set by commands c, d, j, s or y
+	dotline               *list.Element  // the current (dot) line -- can be null
+	lineNbr               int            // the current line number
+	lastSubstRE           *regexp.Regexp // the previous substitution regexp
+	lastSubstReplacement  string         // the previous substitution replacement string
+	lastSubstSuffixes     string         // the previous substitution suffixes
+	lastSearchRE          *regexp.Regexp // the previous search regexp
+	changedSinceLastWrite bool           // whether the buffer has been changed since the last write
 	defaultFilename       string
 	windowSize            int // window size - for scroll command
 
@@ -131,7 +136,7 @@ func mainloop(state State) {
 					case commandRead:
 						err = cmd.CmdRead(&state)
 					case commandSubstitute:
-						fmt.Println("not yet implemented")
+						err = cmd.CmdSubstitute(&state)
 					case commandTransfer:
 						err = cmd.CmdTransfer(&state)
 					case commandUndo:

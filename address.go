@@ -16,6 +16,7 @@ const charDollar string = "$"
 const currentLine int = -1
 const endOfFile int = -2
 const startOfFile int = -3
+
 // if an address is not specified ...
 const notSpecified int = -4
 
@@ -53,11 +54,11 @@ var /* const */ plusMinusN = regexp.MustCompile("^\\s*([\\+-])\\s*(\\d+)\\s*$")
     -n
     +
     -
-  
+
  TODO:
     marks
     regexps
- */
+*/
 func newAddress(addrStr string) (Address, error) {
 	// handle special cases first
 	switch addrStr {
@@ -186,9 +187,9 @@ type AddressRange struct {
 
 /*
  This function returns TRUE if the given address range contains valid values.
- */
-func (ra AddressRange) isAddressRangeSpecified() (bool) {
-	return ! (ra.start.addr == notSpecified && ra.end.addr == notSpecified)
+*/
+func (ra AddressRange) isAddressRangeSpecified() bool {
+	return !(ra.start.addr == notSpecified && ra.end.addr == notSpecified)
 }
 
 /*

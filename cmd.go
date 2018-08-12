@@ -52,7 +52,7 @@ var unrecognisedCommand error = errors.New("unrecognised command")
 var missingFilename error = errors.New("filename missing and no default set")
 var invalidWindowSize error = errors.New("invalid window size")
 
-var justNumberRE = regexp.MustCompile("^\\s*(\\d*)\\s*$")
+var justNumberRE = regexp.MustCompile(`^\s*(\d*)\s*$`)
 var commandLineRE = regexp.MustCompile("(.*?)([acdeEfgGijklmnpPqQrstuvVwWxyz#=])(.*)")
 
 /*
@@ -258,7 +258,7 @@ func (cmd Command) CmdYank(state *State) error {
 /*
  Copies the required lines into a new list.
 */
-func copyLines(startLineNbr, endLineNbr int, state *State) (*list.List) {
+func copyLines(startLineNbr, endLineNbr int, state *State) *list.List {
 	moveToLine(startLineNbr, state)
 	tempBuffer := list.New()
 	el := state.dotline
@@ -427,9 +427,9 @@ func (cmd Command) CmdRead(state *State) error {
 
 /*
  Joins the addressed lines, replacing them by a single line containing their joined text.
- 
+
  If only one address is given, this command does nothing.
- 
+
  If lines are joined, the current address is set to the address of the joined line.
  Else, the current address is unchanged.
 */
@@ -447,7 +447,7 @@ func (cmd Command) CmdJoin(state *State) error {
 	moveToLine(startLineNbr, state)
 	var sb strings.Builder
 	el := state.dotline
-	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr ++ {
+	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr++ {
 		line := el.Value.(Line).line
 		// replace the newline with a space
 		sb.WriteString(strings.Replace(line, "\n", " ", 1))
@@ -464,19 +464,19 @@ func (cmd Command) CmdJoin(state *State) error {
 	newLines := list.New()
 	newLines.PushBack(Line{sb.String()})
 
-	appendLines(startLineNbr - 1, state, newLines)
+	appendLines(startLineNbr-1, state, newLines)
 	return nil
 }
 
 /*
  Moves lines in the buffer.
- 
+
  The addressed lines are moved to after the right-hand destination address.
  The destination address '0' (zero) is valid for this command;
     it moves the addressed lines to the beginning of the buffer.
 
  It is an error if the destination address falls within the range of moved lines.
- 
+
  The current address is set to the new address of the last line moved.
 */
 func (cmd Command) CmdMove(state *State) error {
@@ -497,7 +497,7 @@ func (cmd Command) CmdMove(state *State) error {
 		destLineNbr = state.lineNbr
 	} else {
 		var destLine Address
-	 	if destLine, err = newAddress(destStr); err != nil {
+		if destLine, err = newAddress(destStr); err != nil {
 			return invalidDestinationAddress
 		}
 		if destLineNbr, err = calculateActualLineNumber(destLine, state); err != nil {
@@ -515,7 +515,7 @@ func (cmd Command) CmdMove(state *State) error {
 		return invalidDestinationAddress
 	}
 
-   // delete the lines
+	// delete the lines
 	tempBuffer := deleteLines(startLineNbr, endLineNbr, state)
 	if tempBuffer.Len() == 0 {
 		return nil
@@ -533,9 +533,9 @@ func (cmd Command) CmdMove(state *State) error {
 
 /*
  Copies (i.e., transfers) the addressed lines to after the right-hand destination address.
- 
+
  If the destination address is 0, the lines are copied at the beginning of the buffer.
- 
+
  The current address is set to the address of the last line copied.
 */
 func (cmd Command) CmdTransfer(state *State) error {
@@ -556,7 +556,7 @@ func (cmd Command) CmdTransfer(state *State) error {
 		destLineNbr = state.lineNbr
 	} else {
 		var destLine Address
-	 	if destLine, err = newAddress(destStr); err != nil {
+		if destLine, err = newAddress(destStr); err != nil {
 			return invalidDestinationAddress
 		}
 		if destLineNbr, err = calculateActualLineNumber(destLine, state); err != nil {
@@ -749,11 +749,7 @@ func _printRange(writer io.Writer, cmd Command, state *State, printLineNumbers b
 	el := state.dotline
 	prevEl := el
 	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr++ {
-		if printLineNumbers {
-			fmt.Fprintf(writer, "%4d%c %s", lineNbr, '\t', el.Value.(Line).line)
-		} else {
-			fmt.Fprintf(writer, el.Value.(Line).line)
-		}
+		_printLine(writer, lineNbr, el.Value.(Line).line, printLineNumbers)
 		prevEl = el // store el, to be able to set dotline i/c we hit the end of the list
 		el = el.Next()
 	}
@@ -765,6 +761,14 @@ func _printRange(writer io.Writer, cmd Command, state *State, printLineNumbers b
 	}
 	state.lineNbr = endLineNbr
 	return nil
+}
+
+func _printLine(writer io.Writer, lineNbr int, str string, printLineNumbers bool) {
+	if printLineNumbers {
+		fmt.Fprintf(writer, "%4d%c %s", lineNbr, '\t', str)
+	} else {
+		fmt.Fprintf(writer, str)
+	}
 }
 
 /**

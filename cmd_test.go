@@ -12,10 +12,10 @@ func TestDelete(t *testing.T) {
 	cmd := Command{AddressRange{Address{addr: 2}, Address{addr: 3}}, commandDelete, ""}
 
 	// to capture the output
-	var buff bytes.Buffer // implements io.Writer
+	var buff bytes.Buffer               // implements io.Writer
 	var writer = bufio.NewWriter(&buff) // -> bufio
 
-	err := CmdDelete(cmd, &state)
+	err := cmd.CmdDelete(&state)
 	if err != nil {
 		t.Fatalf("error %s", err)
 	}
@@ -27,11 +27,11 @@ func TestDelete(t *testing.T) {
 		t.Fatalf("2,3d returned '%s'", buff.String())
 	}
 
-   //  delete whole file
+	//  delete whole file
 	state.buffer = createListOfLines([]string{"1", "2", "3", "4", "5"})
 	cmd = Command{AddressRange{Address{addr: 1}, Address{addr: 5}}, commandDelete, ""}
 	buff.Reset()
-	err = CmdDelete(cmd, &state)
+	err = cmd.CmdDelete(&state)
 	if err != nil {
 		t.Fatalf("error %s", err)
 	}
@@ -53,7 +53,7 @@ func TestPrintRange(t *testing.T) {
 	// to capture the output
 	var buff bytes.Buffer // implements io.Writer
 
-	err := _printRange(&buff, cmd, &state)
+	err := _printRange(&buff, cmd, &state, false)
 	if err != nil {
 		t.Fatalf("error %s", err)
 	}
@@ -63,7 +63,7 @@ func TestPrintRange(t *testing.T) {
 
 	buff.Reset()
 	cmd = Command{AddressRange{Address{addr: 1}, Address{addr: 4}}, commandPrint, ""}
-	err = _printRange(&buff, cmd, &state)
+	err = _printRange(&buff, cmd, &state, false)
 	if err != nil {
 		t.Fatalf("error %s", err)
 	}
@@ -73,7 +73,7 @@ func TestPrintRange(t *testing.T) {
 
 	buff.Reset()
 	cmd = Command{AddressRange{Address{addr: 3}, Address{addr: 3}}, commandPrint, ""}
-	err = _printRange(&buff, cmd, &state)
+	err = _printRange(&buff, cmd, &state, false)
 	if err != nil {
 		t.Fatalf("error %s", err)
 	}

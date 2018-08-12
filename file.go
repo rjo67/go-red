@@ -70,13 +70,13 @@ func ReadReader(reader *bufio.Reader) (nbrBytesRead int, listOfLines *list.List,
  Writes the list contents to a file identified by 'filename'.
  Starts at element 'startElement' of the list, which is identified as line# 'startLineNbr'.
  Will then iterate through til 'endLineNbr'.
- 
+
  An existing file will be truncated.
 
  The number of bytes written is returned.
 
  The file is closed when this function returns.
- */
+*/
 func WriteFile(filename string, startElement *list.Element, startLineNbr, endLineNbr int) (nbrBytesWritten int, err error) {
 	file, err := os.Create(filename)
 
