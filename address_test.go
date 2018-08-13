@@ -37,6 +37,7 @@ func TestCreateRangeOffsets(t *testing.T) {
 		{"- --  -- ,9", currentLine, -5, 9, 0},
 		{"+3,-22", currentLine, 3, currentLine, -22},
 		{"-1,+2", currentLine, -1, currentLine, +2},
+		{"+1", currentLine, +1, currentLine, +1},
 		{"+ 3 , - 22", currentLine, 3, currentLine, -22},
 	}
 
@@ -65,7 +66,8 @@ func TestCreateRange(t *testing.T) {
 		{"", notSpecified, notSpecified},
 		{"1,2", 1, 2},
 		{"99,999", 99, 999},
-		{"9,", 9, currentLine},
+		{"9,", 9, 9},
+		{"9", 9, 9},
 		{",12", startOfFile, 12},
 		{",", startOfFile, endOfFile},
 		{"4,$", 4, endOfFile},

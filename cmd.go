@@ -52,7 +52,7 @@ var unrecognisedCommand error = errors.New("unrecognised command")
 var missingFilename error = errors.New("filename missing and no default set")
 var invalidWindowSize error = errors.New("invalid window size")
 
-var justNumberRE = regexp.MustCompile(`^\s*(\d*)\s*$`)
+var justNumberRE = regexp.MustCompile(`^\s*(\d+)\s*$`)
 var commandLineRE = regexp.MustCompile("(.*?)([acdeEfgGijklmnpPqQrstuvVwWxyz#=])(.*)")
 
 /*
@@ -77,7 +77,7 @@ func ParseCommand(str string) (cmd Command, err error) {
 	// check for a number <n> --> equivalent to <n>p
 	matches := justNumberRE.FindStringSubmatch(str)
 	if matches != nil {
-		addrString := matches[1]
+		addrString := strings.TrimSpace(matches[1])
 		addrRange, err := newRange(addrString)
 		if err != nil {
 			return Command{}, err
@@ -87,7 +87,7 @@ func ParseCommand(str string) (cmd Command, err error) {
 	}
 	matches = commandLineRE.FindStringSubmatch(str)
 	if matches != nil {
-		addrString := matches[1]
+		addrString := strings.TrimSpace(matches[1])
 		cmdString := matches[2]
 		restOfCmd := matches[3]
 
@@ -235,14 +235,7 @@ func appendLines(lineNbr int, state *State, newLines *list.List) {
 */
 func (cmd Command) CmdYank(state *State) error {
 	currentAddress := state.lineNbr // save for later
-	var startLineNbr, endLineNbr int
-	var err error
-	if !cmd.addrRange.isAddressRangeSpecified() {
-		startLineNbr = state.lineNbr
-		endLineNbr = state.lineNbr
-	} else {
-		startLineNbr, endLineNbr, err = calculateStartAndEndLineNumbers(cmd.addrRange, state)
-	}
+	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state)
 	if err != nil {
 		return err
 	}
@@ -297,7 +290,7 @@ func deleteLines(startLineNbr, endLineNbr int, state *State) (newList *list.List
  Deleted lines are stored in the state.cutBuffer.
 */
 func (cmd Command) CmdDelete(state *State) error {
-	startLineNbr, endLineNbr, err := calculateStartAndEndLineNumbers(cmd.addrRange, state)
+	startLineNbr, endLineNbr, err := cmd.addrRange.calculateStartAndEndLineNumbers(state)
 	if err != nil {
 		return err
 	}
@@ -440,7 +433,7 @@ func (cmd Command) CmdJoin(state *State) error {
 	if !cmd.addrRange.isAddressRangeSpecified() {
 		return nil
 	} else {
-		if startLineNbr, endLineNbr, err = calculateStartAndEndLineNumbers(cmd.addrRange, state); err != nil {
+		if startLineNbr, endLineNbr, err = cmd.addrRange.calculateStartAndEndLineNumbers(state); err != nil {
 			return err
 		}
 	}
@@ -480,20 +473,15 @@ func (cmd Command) CmdJoin(state *State) error {
  The current address is set to the new address of the last line moved.
 */
 func (cmd Command) CmdMove(state *State) error {
-	var startLineNbr, endLineNbr int
-	var err error
 	// default is current line (for both start/end, and dest)
-	if !cmd.addrRange.isAddressRangeSpecified() {
-		startLineNbr = state.lineNbr
-		endLineNbr = state.lineNbr
-	} else {
-		if startLineNbr, endLineNbr, err = calculateStartAndEndLineNumbers(cmd.addrRange, state); err != nil {
-			return err
-		}
+	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state)
+	if err != nil {
+		return err
 	}
 	var destLineNbr int
 	// default is current line for destination
-	if destStr := strings.TrimSpace(cmd.restOfCmd); destStr == "" {
+	destStr := strings.TrimSpace(cmd.restOfCmd)
+	if destStr == "" {
 		destLineNbr = state.lineNbr
 	} else {
 		var destLine Address
@@ -539,16 +527,9 @@ func (cmd Command) CmdMove(state *State) error {
  The current address is set to the address of the last line copied.
 */
 func (cmd Command) CmdTransfer(state *State) error {
-	var startLineNbr, endLineNbr int
-	var err error
-	// default is current line (for start and end)
-	if !cmd.addrRange.isAddressRangeSpecified() {
-		startLineNbr = state.lineNbr
-		endLineNbr = state.lineNbr
-	} else {
-		if startLineNbr, endLineNbr, err = calculateStartAndEndLineNumbers(cmd.addrRange, state); err != nil {
-			return err
-		}
+	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state)
+	if err != nil {
+		return err
 	}
 	var destLineNbr int
 	// default is current line for destination
@@ -648,7 +629,7 @@ func (cmd Command) CmdWrite(state *State) error {
 		startLineNbr = 1
 		endLineNbr = state.buffer.Len()
 	} else {
-		startLineNbr, endLineNbr, err = calculateStartAndEndLineNumbers(cmd.addrRange, state)
+		startLineNbr, endLineNbr, err = cmd.addrRange.calculateStartAndEndLineNumbers(state)
 		if err != nil {
 			return err
 		}
@@ -669,10 +650,20 @@ func (cmd Command) CmdWrite(state *State) error {
 }
 
 /*
- * Prints the addressed lines. The current address is set to the address of the last line printed.
- */
+ Prints the addressed lines. The current address is set to the address of the last line printed.
+
+ For command "n": Precedes each line by its line number and a <tab>.
+
+ The current address is set to the address of the last line printed.
+*/
 func (cmd Command) CmdPrint(state *State) error {
-	return _printRange(os.Stdout, cmd, state, false)
+	// no address specified defaults to .
+	if !cmd.addrRange.isAddressRangeSpecified() {
+		startAddr := Address{state.lineNbr, 0}
+		endAddr := Address{state.lineNbr, 0}
+		cmd.addrRange = AddressRange{startAddr, endAddr}
+	}
+	return _printRange(os.Stdout, cmd, state, cmd.cmd == commandNumber)
 }
 
 /*
@@ -720,16 +711,8 @@ func (cmd Command) CmdScroll(state *State) error {
 	return _printRange(os.Stdout, cmd, state, true)
 }
 
-/*
- * Prints the addressed lines, preceding each line by its line number and a <tab>.
- * The current address is set to the address of the last line printed.
- */
-func (cmd Command) CmdNumber(state *State) error {
-	return _printRange(os.Stdout, cmd, state, true)
-}
-
 func _printRange(writer io.Writer, cmd Command, state *State, printLineNumbers bool) error {
-	startLineNbr, endLineNbr, err := calculateStartAndEndLineNumbers(cmd.addrRange, state)
+	startLineNbr, endLineNbr, err := cmd.addrRange.calculateStartAndEndLineNumbers(state)
 	if err != nil {
 		return err
 	}

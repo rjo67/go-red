@@ -64,30 +64,19 @@ var noPreviousRegex error = errors.New("No previous regex")
 	 substitution (if the search happened after the substitution).
 */
 func (cmd Command) CmdSubstitute(state *State) error {
-	var startLineNbr, endLineNbr, nbrLinesChanged int
-	var err error
 
-	if !cmd.addrRange.isAddressRangeSpecified() {
-		startLineNbr = state.lineNbr
-		endLineNbr = state.lineNbr
-	} else {
-		if startLineNbr, endLineNbr, err = calculateStartAndEndLineNumbers(cmd.addrRange, state); err != nil {
-			return err
-		}
+	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state)
+	if err != nil {
+		return err
 	}
 
+	var nbrLinesChanged int
 	regexCommand := strings.TrimSpace(cmd.restOfCmd)
 	if regexCommand != "" {
-		delimiter := regexCommand[0:1]
-		split := strings.Split(regexCommand, delimiter)
-		if len(split) != 4 || split[1] == "" {
-			return syntaxMissingDelimiter
+		re, replacement, suffixes, err := parseRegexCommand(regexCommand)
+		if err != nil {
+			return err
 		}
-
-		re := split[1]
-		replacement := split[2]
-		suffixes := split[3]
-
 		nbrLinesChanged, err = processLines(os.Stdout, startLineNbr, endLineNbr, state, re, replacement, suffixes)
 	} else {
 		// TODO need to handle flags on a pure "s" command
@@ -104,6 +93,15 @@ func (cmd Command) CmdSubstitute(state *State) error {
 
 	state.changedSinceLastWrite = true
 	return nil
+}
+
+func parseRegexCommand(regexCommand string) (re, replacement, suffixes string, err error) {
+	delimiter := regexCommand[0:1]
+	split := strings.Split(regexCommand, delimiter)
+	if len(split) != 4 || split[1] == "" {
+		return "", "", "", syntaxMissingDelimiter
+	}
+	return split[1], split[2], split[3], nil
 }
 
 /*

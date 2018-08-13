@@ -137,14 +137,27 @@ func handlePlusMinusNumber(addrStr string) (Address, error) {
 }
 
 /*
- * Calculates both start and end line numbers from the given address range.
- */
-func calculateStartAndEndLineNumbers(addrRange AddressRange, state *State) (startLine int, endLine int, err error) {
-	startLine, err = calculateActualLineNumber(addrRange.start, state)
+ If an address range has been specified, returns the actual start and end line numbers
+  as given by calculateStartAndEndLineNumbers.
+ Otherwise, returns the current line number as start and end.
+*/
+func (ra AddressRange) getAddressRange(state *State) (startLine int, endLine int, err error) {
+	if !ra.isAddressRangeSpecified() {
+		return state.lineNbr, state.lineNbr, nil
+	} else {
+		return ra.calculateStartAndEndLineNumbers(state)
+	}
+}
+
+/*
+ Calculates both start and end line numbers from the given address range.
+*/
+func (ra AddressRange) calculateStartAndEndLineNumbers(state *State) (startLine int, endLine int, err error) {
+	startLine, err = calculateActualLineNumber(ra.start, state)
 	if err != nil {
 		return 0, 0, err
 	}
-	endLine, err = calculateActualLineNumber(addrRange.end, state)
+	endLine, err = calculateActualLineNumber(ra.end, state)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -152,9 +165,8 @@ func calculateStartAndEndLineNumbers(addrRange AddressRange, state *State) (star
 }
 
 /*
- * returns an actual line number, depending on the given address
- * and the current line number if required
- */
+ Returns an actual line number, depending on the given address and the current line number if required
+*/
 func calculateActualLineNumber(address Address, state *State) (int, error) {
 	var lineNbr int = -99
 	switch {
@@ -215,8 +227,9 @@ func newRange(rangeStr string) (addrRange AddressRange, err error) {
 		return AddressRange{Address{addr: endOfFile}, Address{addr: endOfFile}}, nil
 	} else if rangeStr == charComma {
 		return AddressRange{Address{addr: startOfFile}, Address{addr: endOfFile}}, nil
-	} else {
+	} else if justNumberRE.MatchString(rangeStr) {
 		// if we can convert to an int, then a simple address has been specified
+		// Reason for the RE check above: "+1n" is also convertible to an int, but this has a special meaning
 		addrInt, err := strconv.Atoi(rangeStr)
 		if err != nil {
 			// ignore error, carry on
@@ -225,38 +238,45 @@ func newRange(rangeStr string) (addrRange AddressRange, err error) {
 		}
 	}
 
-	// here we just split on the , or ; and let newAddress do the hard work
-	const addrRE string = "(.*)"
-	addrRangeRE := regexp.MustCompile("^" + addrRE + "," + addrRE + "$")
-	matches := addrRangeRE.FindAllStringSubmatch(rangeStr, -1)
-	// we expect two matches
-	if len(matches) != 1 || len(matches[0]) != 3 {
-		return addrRange, unrecognisedRange
-	}
+	// check here if we've got a comma (or semicolon) - if not, just got one address
+	var start, end Address
+	if strings.IndexAny(rangeStr, ",;") == -1 {
+		start, err = newAddress(rangeStr)
+		if err != nil {
+			return addrRange, err
+		}
+		end = start
+	} else {
+		// here we just split on the , or ; and let newAddress do the hard work
+		const addrRE string = "(.*)"
+		addrRangeRE := regexp.MustCompile("^" + addrRE + "," + addrRE + "$")
+		matches := addrRangeRE.FindAllStringSubmatch(rangeStr, -1)
+		// we expect two matches
+		if len(matches) != 1 || len(matches[0]) != 3 {
+			return addrRange, unrecognisedRange
+		}
 
-	startRange := matches[0][1]
-	endRange := matches[0][2]
-	//fmt.Printf("start '%s', end '%s'\n", startRange, endRange)
+		startRange := matches[0][1]
+		endRange := matches[0][2]
 
-	start, err := newAddress(startRange)
-	if err != nil {
-		return addrRange, err
-	}
-	end, err := newAddress(endRange)
-	if err != nil {
-		return addrRange, err
-	}
+		if start, err = newAddress(startRange); err != nil {
+			return addrRange, err
+		}
+		if end, err = newAddress(endRange); err != nil {
+			return addrRange, err
+		}
 
-	//------------------------------
+		//------------------------------
 
-	// special cases: first address empty, second given -> {1,addr} or {.;addr}
-	if startRange == "" && endRange != "" {
-		start = Address{addr: startOfFile}
-		//TODO: when using ; set to currentline
-	}
-	// first address given, second empty -> {1, .}
-	if startRange != "" && endRange == "" {
-		end = Address{addr: currentLine}
+		// special cases: first address empty, second given -> {1,addr} or {.;addr}
+		if startRange == "" && endRange != "" {
+			start = Address{addr: startOfFile}
+			//TODO: when using ; set to currentline
+		}
+		// first address given, second empty -> {<given address>, <given address>}
+		if startRange != "" && endRange == "" {
+			end = start
+		}
 	}
 
 	// start must be before end ('special' values excluded)

@@ -110,8 +110,12 @@ func mainloop(state State) {
 					case commandFilename:
 						state.defaultFilename = strings.TrimSpace(cmd.restOfCmd)
 					case commandGlobal:
-						fmt.Println("not yet implemented")
+						err = cmd.CmdGlobal(&state)
 					case commandGlobalInteractive:
+						fmt.Println("not yet implemented")
+					case commandInverseGlobal:
+						fmt.Println("not yet implemented")
+					case commandInverseGlobalInteractive:
 						fmt.Println("not yet implemented")
 					case commandJoin:
 						err = cmd.CmdJoin(&state)
@@ -121,9 +125,7 @@ func mainloop(state State) {
 						fmt.Println("not yet implemented")
 					case commandMove:
 						err = cmd.CmdMove(&state)
-					case commandNumber:
-						err = cmd.CmdNumber(&state)
-					case commandPrint:
+					case commandNumber, commandPrint:
 						err = cmd.CmdPrint(&state)
 					case commandPrompt:
 						state.showPrompt = !state.showPrompt
@@ -140,10 +142,6 @@ func mainloop(state State) {
 					case commandTransfer:
 						err = cmd.CmdTransfer(&state)
 					case commandUndo:
-						fmt.Println("not yet implemented")
-					case commandInverseGlobal:
-						fmt.Println("not yet implemented")
-					case commandInverseGlobalInteractive:
 						fmt.Println("not yet implemented")
 					case commandWrite:
 						err = cmd.CmdWrite(&state)
