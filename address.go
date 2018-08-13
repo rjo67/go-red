@@ -137,37 +137,9 @@ func handlePlusMinusNumber(addrStr string) (Address, error) {
 }
 
 /*
- If an address range has been specified, returns the actual start and end line numbers
-  as given by calculateStartAndEndLineNumbers.
- Otherwise, returns the current line number as start and end.
-*/
-func (ra AddressRange) getAddressRange(state *State) (startLine int, endLine int, err error) {
-	if !ra.isAddressRangeSpecified() {
-		return state.lineNbr, state.lineNbr, nil
-	} else {
-		return ra.calculateStartAndEndLineNumbers(state)
-	}
-}
-
-/*
- Calculates both start and end line numbers from the given address range.
-*/
-func (ra AddressRange) calculateStartAndEndLineNumbers(state *State) (startLine int, endLine int, err error) {
-	startLine, err = calculateActualLineNumber(ra.start, state)
-	if err != nil {
-		return 0, 0, err
-	}
-	endLine, err = calculateActualLineNumber(ra.end, state)
-	if err != nil {
-		return 0, 0, err
-	}
-	return startLine, endLine, nil
-}
-
-/*
  Returns an actual line number, depending on the given address and the current line number if required
 */
-func calculateActualLineNumber(address Address, state *State) (int, error) {
+func (address Address) calculateActualLineNumber(state *State) (int, error) {
 	var lineNbr int = -99
 	switch {
 	case address.addr >= 0:
@@ -193,8 +165,37 @@ func calculateActualLineNumber(address Address, state *State) (int, error) {
 	}
 }
 
+
 type AddressRange struct {
 	start, end Address
+}
+
+/*
+ If an address range has been specified, returns the actual start and end line numbers
+  as given by calculateStartAndEndLineNumbers.
+ Otherwise, returns the current line number as start and end.
+*/
+func (ra AddressRange) getAddressRange(state *State) (startLine int, endLine int, err error) {
+	if !ra.isAddressRangeSpecified() {
+		return state.lineNbr, state.lineNbr, nil
+	} else {
+		return ra.calculateStartAndEndLineNumbers(state)
+	}
+}
+
+/*
+ Calculates both start and end line numbers from the given address range.
+*/
+func (ra AddressRange) calculateStartAndEndLineNumbers(state *State) (startLine int, endLine int, err error) {
+	startLine, err = ra.start.calculateActualLineNumber(state)
+	if err != nil {
+		return 0, 0, err
+	}
+	endLine, err = ra.end.calculateActualLineNumber(state)
+	if err != nil {
+		return 0, 0, err
+	}
+	return startLine, endLine, nil
 }
 
 /*

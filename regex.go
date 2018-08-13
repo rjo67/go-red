@@ -21,6 +21,39 @@ var noSubstitutions error = errors.New("No substitution performed")
 var noPreviousRegex error = errors.New("No previous regex")
 
 /*
+ Global command.
+ The global command makes two passes over the file.
+ On the first pass, all the addressed lines matching a regular expression re are marked.
+ Then, going sequentially from the beginning of the file to the end of the file,
+ the given command-list is executed for each marked line,
+ with the current address set to the address of that line.
+ Any line modified by the command-list is unmarked.
+
+ The final value of the current address is the value assigned by the last command
+ in the last command-list executed. If there were no matching lines, the current address is unchanged.
+
+ The first command of command-list must appear on the same line as the 'g' command.
+ All lines of a multi-line command-list except the last line must be terminated with a backslash ('\').
+ Any commands are allowed, except for 'g', 'G', 'v', and 'V'.
+ The '.' terminating the input mode of commands 'a', 'c', and 'i' can be omitted
+   if it would be the last line of command-list.
+ By default, a newline alone in command-list is equivalent to a 'p' command.
+ If ed is invoked with the command-line option '-G', then a newline in command-list
+    is equivalent to a '.+1p' command.
+
+ (This is similar to the Substitute command, except the replacement string can be a list of commands)
+*/
+func (cmd Command) CmdGlobal(state *State) error {
+	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("not yet", startLineNbr, endLineNbr)
+	return nil
+}
+
+/*
  Substitute command.
  Replaces text in the addressed lines matching a regular expression re with replacement.
  By default, only the first match in each line is replaced.

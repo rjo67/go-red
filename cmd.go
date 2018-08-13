@@ -117,7 +117,7 @@ func ParseCommand(str string) (cmd Command, err error) {
  */
 func (cmd Command) CmdAppendInsert(state *State) error {
 	// calc required line (checks if this is a valid line)
-	lineNbr, err := calculateActualLineNumber(cmd.addrRange.start, state)
+	lineNbr, err := cmd.addrRange.start.calculateActualLineNumber(state)
 	if err != nil {
 		return err
 	}
@@ -158,7 +158,7 @@ func (cmd Command) CmdAppendInsert(state *State) error {
 */
 func (cmd Command) CmdChange(state *State) error {
 
-	startLineNbr, err := calculateActualLineNumber(cmd.addrRange.start, state)
+	startLineNbr, err := cmd.addrRange.start.calculateActualLineNumber(state)
 	if err != nil {
 		return err
 	}
@@ -347,7 +347,7 @@ func readInputLines() (newLines *list.List, nbrLinesEntered int, err error) {
  The current address is unchanged.
 */
 func (cmd Command) CmdLinenumber(state *State) error {
-	startLineNbr, err := calculateActualLineNumber(cmd.addrRange.start, state)
+	startLineNbr, err := cmd.addrRange.start.calculateActualLineNumber(state)
 	if err != nil {
 		return err
 	}
@@ -398,7 +398,7 @@ func (cmd Command) CmdRead(state *State) error {
 	if !cmd.addrRange.isAddressRangeSpecified() {
 		startLineNbr = state.buffer.Len()
 	} else {
-		startLineNbr, err = calculateActualLineNumber(cmd.addrRange.start, state)
+		startLineNbr, err = cmd.addrRange.start.calculateActualLineNumber(state)
 		if err != nil {
 			return err
 		}
@@ -488,7 +488,7 @@ func (cmd Command) CmdMove(state *State) error {
 		if destLine, err = newAddress(destStr); err != nil {
 			return invalidDestinationAddress
 		}
-		if destLineNbr, err = calculateActualLineNumber(destLine, state); err != nil {
+		if destLineNbr, err = destLine.calculateActualLineNumber(state); err != nil {
 			return err
 		}
 	}
@@ -540,7 +540,7 @@ func (cmd Command) CmdTransfer(state *State) error {
 		if destLine, err = newAddress(destStr); err != nil {
 			return invalidDestinationAddress
 		}
-		if destLineNbr, err = calculateActualLineNumber(destLine, state); err != nil {
+		if destLineNbr, err = destLine.calculateActualLineNumber(state); err != nil {
 			return err
 		}
 	}
@@ -564,7 +564,7 @@ func (cmd Command) CmdPut(state *State) error {
 	if !cmd.addrRange.isAddressRangeSpecified() {
 		startLineNbr = state.lineNbr
 	} else {
-		if startLineNbr, err = calculateActualLineNumber(cmd.addrRange.start, state); err != nil {
+		if startLineNbr, err = cmd.addrRange.start.calculateActualLineNumber(state); err != nil {
 			return err
 		}
 	}
@@ -680,7 +680,7 @@ func (cmd Command) CmdScroll(state *State) error {
 	if !cmd.addrRange.isAddressRangeSpecified() {
 		startLineNbr = state.lineNbr + 1
 	} else {
-		startLineNbr, err = calculateActualLineNumber(cmd.addrRange.start, state)
+		startLineNbr, err = cmd.addrRange.start.calculateActualLineNumber(state)
 		if err != nil {
 			return err
 		}
