@@ -56,10 +56,10 @@ func main() {
 
 	state.windowSize = 15 // see https://stackoverflow.com/a/48610796 for a better way...
 
-	mainloop(state)
+	mainloop(&state)
 }
 
-func mainloop(state State) {
+func mainloop(state *State) {
 	reader := bufio.NewReader(os.Stdin)
 	quit := false
 	for !quit {
@@ -92,77 +92,7 @@ func mainloop(state State) {
 					//ok
 				}
 				if err == nil {
-					switch cmd.cmd {
-					case commandAppend, commandInsert:
-						err = cmd.CmdAppendInsert(&state)
-					case commandChange:
-						err = cmd.CmdChange(&state)
-					case commandDelete:
-						err = cmd.CmdDelete(&state)
-					case commandEdit:
-						if state.changedSinceLastWrite {
-							fmt.Println(unsavedChanges)
-						} else {
-							err = cmd.CmdEdit(&state)
-						}
-					case commandEditUnconditionally:
-						err = cmd.CmdEdit(&state)
-					case commandFilename:
-						state.defaultFilename = strings.TrimSpace(cmd.restOfCmd)
-					case commandGlobal:
-						err = cmd.CmdGlobal(&state)
-					case commandGlobalInteractive:
-						fmt.Println("not yet implemented")
-					case commandInverseGlobal:
-						fmt.Println("not yet implemented")
-					case commandInverseGlobalInteractive:
-						fmt.Println("not yet implemented")
-					case commandJoin:
-						err = cmd.CmdJoin(&state)
-					case commandMark:
-						fmt.Println("not yet implemented")
-					case commandList:
-						fmt.Println("not yet implemented")
-					case commandMove:
-						err = cmd.CmdMove(&state)
-					case commandNumber, commandPrint:
-						err = cmd.CmdPrint(&state)
-					case commandPrompt:
-						state.showPrompt = !state.showPrompt
-					case commandQuit, commandQuitUnconditionally:
-						if cmd.cmd == commandQuit && state.changedSinceLastWrite {
-							fmt.Println(unsavedChanges)
-						} else {
-							quit = true
-						}
-					case commandRead:
-						err = cmd.CmdRead(&state)
-					case commandSubstitute:
-						err = cmd.CmdSubstitute(&state)
-					case commandTransfer:
-						err = cmd.CmdTransfer(&state)
-					case commandUndo:
-						fmt.Println("not yet implemented")
-					case commandWrite:
-						err = cmd.CmdWrite(&state)
-						quit = (cmd.cmd == commandWrite && strings.HasPrefix(cmd.restOfCmd, commandQuit))
-					case commandWriteAppend:
-						fmt.Println("not yet implemented")
-					case commandPut:
-						err = cmd.CmdPut(&state)
-					case commandYank:
-						err = cmd.CmdYank(&state)
-					case commandScroll:
-						err = cmd.CmdScroll(&state)
-					case commandComment:
-						fmt.Println("not yet implemented")
-					case commandLinenumber:
-						err = cmd.CmdLinenumber(&state)
-					case commandNoCommand:
-						// nothing entered -- ignore
-					default:
-						fmt.Println("ERROR got command not in switch!?")
-					}
+					quit, err = processCommand(cmd, state, false)
 				}
 				// each command call can return an error, which will be displayed here
 				if err != nil {
@@ -174,4 +104,107 @@ func mainloop(state State) {
 			}
 		}
 	}
+}
+
+/*
+ Processes the given command.
+
+ inGlobalCommand is set TRUE if we're already processing a 'g' command,
+    in which case certain other commands are not allowed/do not make sense.
+
+ Returns TRUE if the quit command has been given.
+*/
+func processCommand(cmd Command, state *State, inGlobalCommand bool) (quit bool, err error) {
+	switch cmd.cmd {
+	case commandAppend, commandInsert:
+		err = cmd.CmdAppendInsert(state)
+	case commandChange:
+		err = cmd.CmdChange(state)
+	case commandDelete:
+		err = cmd.CmdDelete(state)
+	case commandEdit:
+		if state.changedSinceLastWrite {
+			fmt.Println(unsavedChanges)
+		} else {
+			err = cmd.CmdEdit(state)
+		}
+	case commandEditUnconditionally:
+		err = cmd.CmdEdit(state)
+	case commandFilename:
+		state.defaultFilename = strings.TrimSpace(cmd.restOfCmd)
+	case commandGlobal:
+		if inGlobalCommand {
+			return false, notAllowedInGlobalCommand
+		} else {
+			err = cmd.CmdGlobal(state)
+		}
+	case commandGlobalInteractive:
+		if inGlobalCommand {
+			return false, notAllowedInGlobalCommand
+		} else {
+			fmt.Println("not yet implemented")
+		}
+	case commandInverseGlobal:
+		if inGlobalCommand {
+			return false, notAllowedInGlobalCommand
+		} else {
+			fmt.Println("not yet implemented")
+		}
+	case commandInverseGlobalInteractive:
+		if inGlobalCommand {
+			return false, notAllowedInGlobalCommand
+		} else {
+			fmt.Println("not yet implemented")
+		}
+	case commandJoin:
+		err = cmd.CmdJoin(state)
+	case commandMark:
+		fmt.Println("not yet implemented")
+	case commandList:
+		fmt.Println("not yet implemented")
+	case commandMove:
+		err = cmd.CmdMove(state)
+	case commandNumber, commandPrint:
+		err = cmd.CmdPrint(state)
+	case commandPrompt:
+		state.showPrompt = !state.showPrompt
+	case commandQuit, commandQuitUnconditionally:
+		if inGlobalCommand {
+			return false, notAllowedInGlobalCommand
+		} else {
+			if cmd.cmd == commandQuit && state.changedSinceLastWrite {
+				fmt.Println(unsavedChanges)
+			} else {
+				quit = true
+			}
+		}
+	case commandRead:
+		err = cmd.CmdRead(state)
+	case commandSubstitute:
+		err = cmd.CmdSubstitute(state)
+	case commandTransfer:
+		err = cmd.CmdTransfer(state)
+	case commandUndo:
+		fmt.Println("not yet implemented")
+	case commandWrite:
+		err = cmd.CmdWrite(state)
+		quit = (cmd.cmd == commandWrite && strings.HasPrefix(cmd.restOfCmd, commandQuit))
+	case commandWriteAppend:
+		fmt.Println("not yet implemented")
+	case commandPut:
+		err = cmd.CmdPut(state)
+	case commandYank:
+		err = cmd.CmdYank(state)
+	case commandScroll:
+		err = cmd.CmdScroll(state)
+	case commandComment:
+		fmt.Println("not yet implemented")
+	case commandLinenumber:
+		err = cmd.CmdLinenumber(state)
+	case commandNoCommand:
+		// nothing entered -- ignore
+	default:
+		fmt.Println("ERROR got command not in switch!?")
+	}
+	return quit, err
 }

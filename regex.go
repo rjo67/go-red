@@ -44,12 +44,15 @@ var noPreviousRegex error = errors.New("No previous regex")
  (This is similar to the Substitute command, except the replacement string can be a list of commands)
 */
 func (cmd Command) CmdGlobal(state *State) error {
+	currentLineNbr := state.lineNbr
 	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("not yet", startLineNbr, endLineNbr)
+	// find matching lines
+
+	fmt.Println("not yet", startLineNbr, endLineNbr, currentLineNbr)
 	return nil
 }
 

@@ -165,7 +165,6 @@ func (address Address) calculateActualLineNumber(state *State) (int, error) {
 	}
 }
 
-
 type AddressRange struct {
 	start, end Address
 }

@@ -48,6 +48,7 @@ const commandLinenumber string = "="
 // returned when an empty line was entered
 const commandNoCommand string = ""
 
+var notAllowedInGlobalCommand error = errors.New("command cannot be used within 'g'/'v'")
 var unrecognisedCommand error = errors.New("unrecognised command")
 var missingFilename error = errors.New("filename missing and no default set")
 var invalidWindowSize error = errors.New("invalid window size")
@@ -252,14 +253,11 @@ func (cmd Command) CmdYank(state *State) error {
  Copies the required lines into a new list.
 */
 func copyLines(startLineNbr, endLineNbr int, state *State) *list.List {
-	moveToLine(startLineNbr, state)
 	tempBuffer := list.New()
-	el := state.dotline
-	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr++ {
-		element := el
-		el = el.Next()
-		tempBuffer.PushBack(element.Value)
+	copyFunc := func(lineNbr int, el *list.Element, state *State) {
+		tempBuffer.PushBack(el.Value)
 	}
+	iterateLines(startLineNbr, endLineNbr, state, copyFunc)
 	return tempBuffer
 }
 
@@ -267,16 +265,31 @@ func copyLines(startLineNbr, endLineNbr int, state *State) *list.List {
  Deletes the required lines from the state.buffer and returns them as a new list.
 */
 func deleteLines(startLineNbr, endLineNbr int, state *State) (newList *list.List) {
-	moveToLine(startLineNbr, state)
 	tempBuffer := list.New()
+	deleteFunc := func(lineNbr int, el *list.Element, state *State) {
+		state.buffer.Remove(el)
+		tempBuffer.PushBack(el.Value)
+	}
+	iterateLines(startLineNbr, endLineNbr, state, deleteFunc)
+	return tempBuffer
+}
+
+/*
+ Defines a function which operates on a line
+*/
+type LineProcessorFn func(lineNbr int, el *list.Element, state *State)
+
+/*
+ Iterate over the required lines and apply the given function.
+*/
+func iterateLines(startLineNbr, endLineNbr int, state *State, fn LineProcessorFn) {
+	moveToLine(startLineNbr, state)
 	el := state.dotline
 	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr++ {
-		elementToDelete := el
+		elementCopy := el
 		el = el.Next()
-		state.buffer.Remove(elementToDelete)
-		tempBuffer.PushBack(elementToDelete.Value)
+		fn(lineNbr, elementCopy, state)
 	}
-	return tempBuffer
 }
 
 /*
@@ -437,15 +450,13 @@ func (cmd Command) CmdJoin(state *State) error {
 			return err
 		}
 	}
-	moveToLine(startLineNbr, state)
 	var sb strings.Builder
-	el := state.dotline
-	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr++ {
+	joinFn := func(lineNbr int, el *list.Element, state *State) {
 		line := el.Value.(Line).line
 		// replace the newline with a space
 		sb.WriteString(strings.Replace(line, "\n", " ", 1))
-		el = el.Next()
 	}
+	iterateLines(startLineNbr, endLineNbr, state, joinFn)
 	// add newline again
 	sb.WriteString("\n")
 
