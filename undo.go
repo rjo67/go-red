@@ -9,12 +9,16 @@ import (
 var nothingToUndo error = errors.New("Nothing to undo")
 
 /*
- When processing a command, its inverse is stored in the undo list (in state).
+ When processing a command, its inverse is stored in the undo list (see State).
+
+ TODO 
+ The list holds elements of type []Undo, because some commands require a multi-level undo.
+
 */
 type Undo struct {
-	cmd  Command      // the command required to undo what has just been changed
-	text *list.List   // text which was changed
-	originalCmd Command // for when we implement 'redo'
+	cmd         Command    // the command required to undo what has just been changed
+	text        *list.List // text which was changed
+	originalCmd Command    // for when we implement 'redo'
 }
 
 func (cmd Command) CmdUndo(state *State) error {

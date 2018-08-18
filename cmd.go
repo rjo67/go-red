@@ -147,26 +147,22 @@ func (cmd Command) CmdAppendInsert(state *State, inputLines *list.List) error {
 		state.buffer.PushFrontList(newLines)
 		moveToLine(nbrLinesEntered, state)
 		if !state.processingUndo {
-			startAddrForUndo := Address{1, 0}
-			endAddrForUndo := Address{nbrLinesEntered, 0}
-			state.undo.PushFront(Undo{Command{AddressRange{startAddrForUndo, endAddrForUndo}, commandDelete, ""}, newLines, cmd})
+			state.addUndo(1, nbrLinesEntered, commandDelete, newLines, cmd)
 		}
 	} else {
-		var startAddrForUndo, endAddrForUndo Address
+		var startAddrForUndo, endAddrForUndo int
 		// an "insert" at line <n> is the same as an append at line <n-1>
 		if cmd.cmd == commandInsert {
-			startAddrForUndo = Address{lineNbr, 0}
-			endAddrForUndo = Address{lineNbr + nbrLinesEntered - 1, 0}
+			startAddrForUndo = lineNbr
+			endAddrForUndo = lineNbr + nbrLinesEntered - 1
 			lineNbr--
 		} else { // append
-			startAddrForUndo = Address{lineNbr + 1, 0}
-			endAddrForUndo = Address{lineNbr + nbrLinesEntered, 0}
+			startAddrForUndo = lineNbr + 1
+			endAddrForUndo = lineNbr + nbrLinesEntered
 		}
 		appendLines(lineNbr, state, newLines)
 
-		if !state.processingUndo {
-			state.undo.PushFront(Undo{Command{AddressRange{startAddrForUndo, endAddrForUndo}, commandDelete, ""}, newLines, cmd})
-		}
+		state.addUndo(startAddrForUndo, endAddrForUndo, commandDelete, newLines, cmd)
 	}
 
 	return nil
@@ -183,7 +179,7 @@ func (cmd Command) CmdAppendInsert(state *State, inputLines *list.List) error {
  the current address is set to the address of the new last line;
  if no lines remain in the buffer, the current address is set to zero.
 */
-func (cmd Command) CmdChange(state *State) error {
+func (cmd Command) CmdChange(state *State, inputLines *list.List) error {
 
 	startLineNbr, err := cmd.addrRange.start.calculateActualLineNumber(state)
 	if err != nil {
@@ -193,9 +189,23 @@ func (cmd Command) CmdChange(state *State) error {
 		return invalidLine
 	}
 
+	var newLines *list.List
+	var nbrLinesEntered int
+	if inputLines != nil {
+		newLines = inputLines
+		nbrLinesEntered = inputLines.Len()
+	} else {
+		// get the input, abort if empty
+		newLines, nbrLinesEntered, err = readInputLines()
+	}
+	if nbrLinesEntered == 0 {
+		return nil
+	}
+
 	// delete the lines
 	deleteCmd := Command{cmd.addrRange, commandDelete, cmd.restOfCmd}
-	deleteCmd.CmdDelete(state)
+	deleteCmd.CmdDelete(state, false)
+	// what's deleted is stored in the cutBuffer
 
 	var atEof bool
 
@@ -205,16 +215,15 @@ func (cmd Command) CmdChange(state *State) error {
 		atEof = true
 	}
 
-	newLines, nbrLinesEntered, err := readInputLines()
-	if nbrLinesEntered == 0 {
-		return nil
-	}
 	state.changedSinceLastWrite = true
 
 	if atEof {
 		appendLines(startLineNbr, state, newLines)
+		// "change" is its own inverse
+		state.addUndo(startLineNbr+1, startLineNbr+newLines.Len(), commandChange, state.cutBuffer, cmd)
 	} else {
 		appendLines(startLineNbr-1, state, newLines)
+		state.addUndo(startLineNbr, startLineNbr+newLines.Len()-1, commandChange, state.cutBuffer, cmd)
 	}
 
 	return nil
@@ -327,8 +336,11 @@ func iterateLines(startLineNbr, endLineNbr int, state *State, fn LineProcessorFn
  if no lines remain in the buffer, the current address is set to zero.
 
  Deleted lines are stored in the state.cutBuffer.
+
+ If addUndo is true, an undo command will be stored in state.undo.
+ (This will be affected by the value of state.processingUndo)
 */
-func (cmd Command) CmdDelete(state *State) error {
+func (cmd Command) CmdDelete(state *State, addUndo bool) error {
 	startLineNbr, endLineNbr, err := cmd.addrRange.calculateStartAndEndLineNumbers(state)
 	if err != nil {
 		return err
@@ -348,15 +360,13 @@ func (cmd Command) CmdDelete(state *State) error {
 	bufferLen := state.buffer.Len()
 
 	// inverse of delete m..n  ist insert at m
-	if !state.processingUndo {
+	if addUndo {
 		// special case: we've deleted the last line
 		if startLineNbr > bufferLen {
 			// undo of $d is $-1,a
-			startAddr := Address{endOfFile, 0}
-			state.undo.PushFront(Undo{Command{AddressRange{startAddr, startAddr}, commandAppend, ""}, tempBuffer, cmd})
+			state.addUndo(endOfFile, endOfFile, commandAppend, tempBuffer, cmd)
 		} else {
-			startAddr := Address{startLineNbr, 0}
-			state.undo.PushFront(Undo{Command{AddressRange{startAddr, startAddr}, commandInsert, ""}, tempBuffer, cmd})
+			state.addUndo(startLineNbr, startLineNbr, commandInsert, tempBuffer, cmd)
 		}
 	}
 
@@ -427,6 +437,7 @@ func (cmd Command) CmdEdit(state *State) error {
 	fmt.Printf("%dL, %dC\n", listOfLines.Len(), nbrBytesRead)
 	state.buffer = listOfLines
 	state.changedSinceLastWrite = false
+	state.undo = list.New()
 	moveToLine(state.buffer.Len(), state)
 	return nil
 }
@@ -466,6 +477,7 @@ func (cmd Command) CmdRead(state *State) error {
 	if nbrLinesRead > 0 {
 		appendLines(startLineNbr, state, listOfLines)
 		state.changedSinceLastWrite = true
+		state.addUndo(startLineNbr+1, startLineNbr+listOfLines.Len(), commandDelete, nil, cmd)
 	} else {
 		moveToLine(startLineNbr, state)
 	}
@@ -501,15 +513,12 @@ func (cmd Command) CmdJoin(state *State) error {
 	// add newline again
 	sb.WriteString("\n")
 
-	// delete the lines (and set cutbuffer)
-	deleteCmd := Command{cmd.addrRange, commandDelete, cmd.restOfCmd}
-	deleteCmd.CmdDelete(state)
+	changeCommand := Command{cmd.addrRange, commandChange, cmd.restOfCmd}
 
-	// append the string buffer at line <startLineNbr - 1> with the string buffer
 	newLines := list.New()
 	newLines.PushBack(Line{sb.String()})
+	changeCommand.CmdChange(state, newLines)
 
-	appendLines(startLineNbr-1, state, newLines)
 	return nil
 }
 
@@ -544,10 +553,7 @@ func (cmd Command) CmdMove(state *State) error {
 			return err
 		}
 	}
-	if startLineNbr == 0 {
-		return invalidDestinationAddress
-	}
-	if destLineNbr > state.buffer.Len() {
+	if startLineNbr == 0 || destLineNbr > state.buffer.Len() {
 		return invalidDestinationAddress
 	}
 	// it is an error if the destination address falls within the range of moved lines
@@ -602,6 +608,9 @@ func (cmd Command) CmdTransfer(state *State) error {
 	tempBuffer := copyLines(startLineNbr, endLineNbr, state)
 	appendLines(destLineNbr, state, tempBuffer)
 	state.changedSinceLastWrite = true
+
+	// the undo is a delete command from destLineNbr + 1
+	state.addUndo(destLineNbr+1, destLineNbr+tempBuffer.Len(), commandDelete, nil, cmd)
 	return nil
 }
 
@@ -623,6 +632,8 @@ func (cmd Command) CmdPut(state *State) error {
 	nbrLines := state.cutBuffer.Len()
 	if nbrLines > 0 {
 		appendLines(startLineNbr, state, state.cutBuffer)
+		state.changedSinceLastWrite = true
+		state.addUndo(startLineNbr+1, startLineNbr+nbrLines, commandDelete, nil, cmd)
 	}
 	return nil
 }

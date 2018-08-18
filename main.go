@@ -31,15 +31,25 @@ type State struct {
 	lastSubstSuffixes     string         // the previous substitution suffixes
 	lastSearchRE          *regexp.Regexp // the previous search regexp
 	undo                  *list.List     // list of commands to undo
-	processingUndo  bool           // if currently processing an undo (therefore don't add undo commands)
+	processingUndo        bool           // if currently processing an undo (therefore don't add undo commands)
 	changedSinceLastWrite bool           // whether the buffer has been changed since the last write
-	defaultFilename       string
-	windowSize            int // window size - for scroll command
+	defaultFilename       string         // name of the default file
+	windowSize            int            // window size - for scroll command
+	debug                 bool           // cmdline flag: debugging activated?
+	prompt                string         // cmdline flag: the prompt string
+	showPrompt            bool           // whether to show the prompt
+}
 
-	// program flags
-	debug      bool // debugging activated?
-	prompt     string
-	showPrompt bool
+/*
+ Adds an undo command to the list held in the state.
+ Does nothing if we're already processing an "undo".
+*/
+func (state *State) addUndo(start, end int, command string, text *list.List, origCmd Command) {
+	if !state.processingUndo {
+	undoCommand := Undo{Command{AddressRange{Address{start, 0}, Address{end, 0}}, command, ""}, text, origCmd}
+	fmt.Println("added undo:", undoCommand)
+	state.undo.PushFront(undoCommand)
+}
 }
 
 func main() {
@@ -123,9 +133,9 @@ func processCommand(cmd Command, state *State, enteredText *list.List, inGlobalC
 	case commandAppend, commandInsert:
 		err = cmd.CmdAppendInsert(state, enteredText)
 	case commandChange:
-		err = cmd.CmdChange(state)
+		err = cmd.CmdChange(state, enteredText)
 	case commandDelete:
-		err = cmd.CmdDelete(state)
+		err = cmd.CmdDelete(state, true)
 	case commandEdit:
 		if state.changedSinceLastWrite {
 			fmt.Println(unsavedChanges)
