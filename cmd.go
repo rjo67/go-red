@@ -105,28 +105,39 @@ func ParseCommand(str string) (cmd Command, err error) {
 }
 
 /*
- * Appends text to the buffer after the addressed line.
- * or
- * Inserts text in the buffer before the addressed line.
- *
- * The address '0' (zero) is valid for this command;
- *   append: it places the entered text at the beginning of the buffer.
- *   insert: it is equivalent to address '1'.
- *
- * The current address is set to the address of the last line entered or,
- * if there were none, to the addressed line.
- */
-func (cmd Command) CmdAppendInsert(state *State) error {
+ Appends text to the buffer after the addressed line.
+ or
+ Inserts text in the buffer before the addressed line.
+
+ The address '0' (zero) is valid for this command;
+   append: it places the entered text at the beginning of the buffer.
+   insert: it is equivalent to address '1'.
+
+ The current address is set to the address of the last line entered or,
+ if there were none, to the addressed line.
+
+ If the parameter "inputLines" is specified, this input will be used.
+ Otherwise the user must input the required lines, terminated by ".".
+*/
+func (cmd Command) CmdAppendInsert(state *State, inputLines *list.List) error {
 	// calc required line (checks if this is a valid line)
 	lineNbr, err := cmd.addrRange.start.calculateActualLineNumber(state)
 	if err != nil {
 		return err
 	}
 
-	newLines, nbrLinesEntered, err := readInputLines()
+	var newLines *list.List
+	var nbrLinesEntered int
+	if inputLines != nil {
+		newLines = inputLines
+		nbrLinesEntered = inputLines.Len()
+	} else {
+		newLines, nbrLinesEntered, err = readInputLines()
+	}
 	if nbrLinesEntered == 0 {
 		return nil
 	}
+
 	state.changedSinceLastWrite = true
 
 	// special case: append line 0
@@ -135,12 +146,27 @@ func (cmd Command) CmdAppendInsert(state *State) error {
 	if (cmd.cmd == commandAppend && lineNbr == 0) || (cmd.cmd == commandInsert && lineNbr <= 1) {
 		state.buffer.PushFrontList(newLines)
 		moveToLine(nbrLinesEntered, state)
+		if !state.processingUndo {
+			startAddrForUndo := Address{1, 0}
+			endAddrForUndo := Address{nbrLinesEntered, 0}
+			state.undo.PushFront(Undo{Command{AddressRange{startAddrForUndo, endAddrForUndo}, commandDelete, ""}, newLines, cmd})
+		}
 	} else {
+		var startAddrForUndo, endAddrForUndo Address
 		// an "insert" at line <n> is the same as an append at line <n-1>
 		if cmd.cmd == commandInsert {
+			startAddrForUndo = Address{lineNbr, 0}
+			endAddrForUndo = Address{lineNbr + nbrLinesEntered - 1, 0}
 			lineNbr--
+		} else { // append
+			startAddrForUndo = Address{lineNbr + 1, 0}
+			endAddrForUndo = Address{lineNbr + nbrLinesEntered, 0}
 		}
 		appendLines(lineNbr, state, newLines)
+
+		if !state.processingUndo {
+			state.undo.PushFront(Undo{Command{AddressRange{startAddrForUndo, endAddrForUndo}, commandDelete, ""}, newLines, cmd})
+		}
 	}
 
 	return nil
@@ -319,9 +345,24 @@ func (cmd Command) CmdDelete(state *State) error {
 
 	state.cutBuffer = tempBuffer
 	state.changedSinceLastWrite = true
+	bufferLen := state.buffer.Len()
+
+	// inverse of delete m..n  ist insert at m
+	if !state.processingUndo {
+		// special case: we've deleted the last line
+		if startLineNbr > bufferLen {
+			// undo of $d is $-1,a
+			startAddr := Address{endOfFile, 0}
+			state.undo.PushFront(Undo{Command{AddressRange{startAddr, startAddr}, commandAppend, ""}, tempBuffer, cmd})
+		} else {
+			startAddr := Address{startLineNbr, 0}
+			state.undo.PushFront(Undo{Command{AddressRange{startAddr, startAddr}, commandInsert, ""}, tempBuffer, cmd})
+		}
+	}
+
+	// set up line nbr and dotline
 
 	newLineNbr := startLineNbr
-	bufferLen := state.buffer.Len()
 	if bufferLen == 0 {
 		state.dotline = nil
 		state.lineNbr = 0

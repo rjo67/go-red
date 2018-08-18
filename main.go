@@ -30,6 +30,8 @@ type State struct {
 	lastSubstReplacement  string         // the previous substitution replacement string
 	lastSubstSuffixes     string         // the previous substitution suffixes
 	lastSearchRE          *regexp.Regexp // the previous search regexp
+	undo                  *list.List     // list of commands to undo
+	processingUndo  bool           // if currently processing an undo (therefore don't add undo commands)
 	changedSinceLastWrite bool           // whether the buffer has been changed since the last write
 	defaultFilename       string
 	windowSize            int // window size - for scroll command
@@ -44,6 +46,7 @@ func main() {
 	state := State{}
 	state.buffer = list.New()
 	state.cutBuffer = list.New()
+	state.undo = list.New()
 
 	flag.BoolVar(&state.debug, "d", false, "debug mode")
 	// default is set to true
@@ -92,7 +95,7 @@ func mainloop(state *State) {
 					//ok
 				}
 				if err == nil {
-					quit, err = processCommand(cmd, state, false)
+					quit, err = processCommand(cmd, state, nil, false)
 				}
 				// each command call can return an error, which will be displayed here
 				if err != nil {
@@ -109,15 +112,16 @@ func mainloop(state *State) {
 /*
  Processes the given command.
 
+ enteredText is non-nil if we're processing an undo (e.g. undoing a delete)
  inGlobalCommand is set TRUE if we're already processing a 'g' command,
     in which case certain other commands are not allowed/do not make sense.
 
  Returns TRUE if the quit command has been given.
 */
-func processCommand(cmd Command, state *State, inGlobalCommand bool) (quit bool, err error) {
+func processCommand(cmd Command, state *State, enteredText *list.List, inGlobalCommand bool) (quit bool, err error) {
 	switch cmd.cmd {
 	case commandAppend, commandInsert:
-		err = cmd.CmdAppendInsert(state)
+		err = cmd.CmdAppendInsert(state, enteredText)
 	case commandChange:
 		err = cmd.CmdChange(state)
 	case commandDelete:
@@ -185,7 +189,11 @@ func processCommand(cmd Command, state *State, inGlobalCommand bool) (quit bool,
 	case commandTransfer:
 		err = cmd.CmdTransfer(state)
 	case commandUndo:
-		fmt.Println("not yet implemented")
+		if inGlobalCommand {
+			return false, notAllowedInGlobalCommand
+		} else {
+			err = cmd.CmdUndo(state)
+		}
 	case commandWrite:
 		err = cmd.CmdWrite(state)
 		quit = (cmd.cmd == commandWrite && strings.HasPrefix(cmd.restOfCmd, commandQuit))
@@ -204,7 +212,7 @@ func processCommand(cmd Command, state *State, inGlobalCommand bool) (quit bool,
 	case commandNoCommand:
 		// nothing entered -- ignore
 	default:
-		fmt.Println("ERROR got command not in switch!?")
+		fmt.Println("ERROR got command not in switch!?", cmd.cmd)
 	}
 	return quit, err
 }
