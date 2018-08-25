@@ -21,6 +21,7 @@ const commandEditUnconditionally string = "E"
 const commandFilename string = "f"
 const commandGlobal string = "g"
 const commandGlobalInteractive string = "G"
+const commandHelp string = "h" // a startling departure from the ed range of commands ...
 const commandInsert string = "i"
 const commandJoin string = "j"
 const commandMark string = "k"
@@ -54,7 +55,7 @@ var missingFilename error = errors.New("filename missing and no default set")
 var invalidWindowSize error = errors.New("invalid window size")
 
 var justNumberRE = regexp.MustCompile(`^\s*(\d+)\s*$`)
-var commandLineRE = regexp.MustCompile("(.*?)([acdeEfgGijklmnpPqQrstuvVwWxyz#=])(.*)")
+var commandLineRE = regexp.MustCompile("(.*?)([acdeEfgGhijklmnpPqQrstuvVwWxyz#=])(.*)")
 
 /*
  * A command, parsed from user input
@@ -712,6 +713,11 @@ func (cmd Command) CmdWrite(state *State) error {
 	return nil
 }
 
+func (cmd Command) CmdComment(state *State) error {
+	// does nothing
+	return nil
+}
+
 /*
  Prints the addressed lines. The current address is set to the address of the last line printed.
 
@@ -772,6 +778,49 @@ func (cmd Command) CmdScroll(state *State) error {
 	endAddr := Address{endLineNbr, 0}
 	cmd.addrRange = AddressRange{startAddr, endAddr}
 	return _printRange(os.Stdout, cmd, state, true)
+}
+
+/*
+ Displays a list of the available commands.
+*/
+func (cmd Command) CmdHelp(state *State) error {
+	fmt.Printf("*** %s (v%s)\n", NAME, VERSION)
+	fmt.Println()
+	fmt.Println(" ", commandAppend, "Appends text after the addressed line.")
+	fmt.Println(" ", commandChange, "Changes lines in the buffer.")
+	fmt.Println(" ", commandDelete, "Deletes the addressed lines from the buffer.")
+	fmt.Println(" ", commandEdit, "Edits file, and sets the default filename.")
+	fmt.Println(" ", commandEditUnconditionally, "Edits file regardless of any changes in current buffer.")
+	fmt.Println(" ", commandFilename, "Sets the default filename.")
+	fmt.Println(" ", commandGlobal, "Executes the command-list for all matching lines.")
+	fmt.Println(" ", commandGlobalInteractive, "Interactive 'global'.")
+	fmt.Println(" ", commandHelp, "Displays this help.")
+	fmt.Println(" ", commandInsert, "Inserts text before the addressed line.")
+	fmt.Println(" ", commandJoin, "Joins the addressed lines, replacing them by a single line containing the joined text.")
+	fmt.Println(" ", commandMark, "Marks the current line.")
+	fmt.Println(" ", commandList, "Display the addressed lines.")
+	fmt.Println(" ", commandMove, "Moves lines in the buffer.")
+	fmt.Println(" ", commandNumber, "Displays the addressed lines with line numbers.")
+	fmt.Println(" ", commandPrint, "Prints the addressed lines.")
+	fmt.Println(" ", commandPrompt, "Sets the prompt.")
+	fmt.Println(" ", commandQuit, "Quits the editor.")
+	fmt.Println(" ", commandQuitUnconditionally, "Quits the editor without saving changes.")
+	fmt.Println(" ", commandRead, "Reads file and appends it after the addressed line.")
+	fmt.Println(" ", commandSubstitute, "Replaces text in the addressed lines matching a regular expression.")
+	fmt.Println(" ", commandTransfer, "Copies (transfers) the addressed lines to after the right-hand destination address.")
+	fmt.Println(" ", commandUndo, "Undoes the previous command.")
+	fmt.Println(" ", commandInverseGlobal, "As 'global' but acts on all lines NOT matching the regex.")
+	fmt.Println(" ", commandInverseGlobalInteractive, "Interactive 'inverse-global'.")
+	fmt.Println(" ", commandWrite, "Writes the addressed lines to a file.")
+	fmt.Println(" ", commandWriteAppend, "Appends the addressed lines to a file.")
+	fmt.Println(" ", commandPut, "Copies (puts) the contents of the cut-buffer to after the addressed line.")
+	fmt.Println(" ", commandYank, "Copies (yanks) the addressed lines to the cut-buffer.")
+	fmt.Println(" ", commandScroll, "Scrolls n lines starting at the addressed line.")
+	fmt.Println(" ", commandComment, "Comment -- rest of line will be ignored.")
+	fmt.Println(" ", commandLinenumber, "Prints the line number of the addressed line.")
+	fmt.Println()
+
+	return nil
 }
 
 func _printRange(writer io.Writer, cmd Command, state *State, printLineNumbers bool) error {

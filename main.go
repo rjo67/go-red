@@ -10,6 +10,9 @@ import (
 	"strings"
 )
 
+const VERSION = "0.1"
+const NAME = "Rich's ed"
+
 const unsavedChanges string = "buffer has unsaved changes"
 
 /**
@@ -46,10 +49,10 @@ type State struct {
 */
 func (state *State) addUndo(start, end int, command string, text *list.List, origCmd Command) {
 	if !state.processingUndo {
-	undoCommand := Undo{Command{AddressRange{Address{start, 0}, Address{end, 0}}, command, ""}, text, origCmd}
-	fmt.Println("added undo:", undoCommand)
-	state.undo.PushFront(undoCommand)
-}
+		undoCommand := Undo{Command{AddressRange{Address{start, 0}, Address{end, 0}}, command, ""}, text, origCmd}
+		fmt.Println("added undo:", undoCommand)
+		state.undo.PushFront(undoCommand)
+	}
 }
 
 func main() {
@@ -96,7 +99,8 @@ func mainloop(state *State) {
 				// first check for commands which cannot take ranges
 				switch cmd.cmd {
 				case commandEdit, commandEditUnconditionally,
-					commandFilename, commandPrompt, commandQuit, commandQuitUnconditionally,
+					commandFilename, commandHelp, commandPrompt,
+					commandQuit, commandQuitUnconditionally,
 					commandUndo:
 					if cmd.addrRange.isAddressRangeSpecified() {
 						err = rangeShouldNotBeSpecified
@@ -129,6 +133,20 @@ func mainloop(state *State) {
  Returns TRUE if the quit command has been given.
 */
 func processCommand(cmd Command, state *State, enteredText *list.List, inGlobalCommand bool) (quit bool, err error) {
+	// following commands are not allowed whilst procesing a global "g" command
+	if inGlobalCommand {
+		switch cmd.cmd {
+		case commandEdit, commandEditUnconditionally,
+			commandGlobal, commandGlobalInteractive,
+			commandInverseGlobal, commandInverseGlobalInteractive,
+			commandHelp,
+			commandQuit, commandQuitUnconditionally,
+			commandUndo, commandWrite, commandWriteAppend:
+			return false, notAllowedInGlobalCommand
+		default:
+			//ok
+		}
+	}
 	switch cmd.cmd {
 	case commandAppend, commandInsert:
 		err = cmd.CmdAppendInsert(state, enteredText)
@@ -147,29 +165,15 @@ func processCommand(cmd Command, state *State, enteredText *list.List, inGlobalC
 	case commandFilename:
 		state.defaultFilename = strings.TrimSpace(cmd.restOfCmd)
 	case commandGlobal:
-		if inGlobalCommand {
-			return false, notAllowedInGlobalCommand
-		} else {
-			err = cmd.CmdGlobal(state)
-		}
+		err = cmd.CmdGlobal(state)
 	case commandGlobalInteractive:
-		if inGlobalCommand {
-			return false, notAllowedInGlobalCommand
-		} else {
-			fmt.Println("not yet implemented")
-		}
+		fmt.Println("not yet implemented")
+	case commandHelp:
+		err = cmd.CmdHelp(state)
 	case commandInverseGlobal:
-		if inGlobalCommand {
-			return false, notAllowedInGlobalCommand
-		} else {
-			fmt.Println("not yet implemented")
-		}
+		fmt.Println("not yet implemented")
 	case commandInverseGlobalInteractive:
-		if inGlobalCommand {
-			return false, notAllowedInGlobalCommand
-		} else {
-			fmt.Println("not yet implemented")
-		}
+		fmt.Println("not yet implemented")
 	case commandJoin:
 		err = cmd.CmdJoin(state)
 	case commandMark:
@@ -183,14 +187,10 @@ func processCommand(cmd Command, state *State, enteredText *list.List, inGlobalC
 	case commandPrompt:
 		state.showPrompt = !state.showPrompt
 	case commandQuit, commandQuitUnconditionally:
-		if inGlobalCommand {
-			return false, notAllowedInGlobalCommand
+		if cmd.cmd == commandQuit && state.changedSinceLastWrite {
+			fmt.Println(unsavedChanges)
 		} else {
-			if cmd.cmd == commandQuit && state.changedSinceLastWrite {
-				fmt.Println(unsavedChanges)
-			} else {
-				quit = true
-			}
+			quit = true
 		}
 	case commandRead:
 		err = cmd.CmdRead(state)
@@ -199,11 +199,7 @@ func processCommand(cmd Command, state *State, enteredText *list.List, inGlobalC
 	case commandTransfer:
 		err = cmd.CmdTransfer(state)
 	case commandUndo:
-		if inGlobalCommand {
-			return false, notAllowedInGlobalCommand
-		} else {
-			err = cmd.CmdUndo(state)
-		}
+		err = cmd.CmdUndo(state)
 	case commandWrite:
 		err = cmd.CmdWrite(state)
 		quit = (cmd.cmd == commandWrite && strings.HasPrefix(cmd.restOfCmd, commandQuit))
@@ -216,7 +212,7 @@ func processCommand(cmd Command, state *State, enteredText *list.List, inGlobalC
 	case commandScroll:
 		err = cmd.CmdScroll(state)
 	case commandComment:
-		fmt.Println("not yet implemented")
+		err = cmd.CmdComment(state)
 	case commandLinenumber:
 		err = cmd.CmdLinenumber(state)
 	case commandNoCommand:

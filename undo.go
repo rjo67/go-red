@@ -11,7 +11,7 @@ var nothingToUndo error = errors.New("Nothing to undo")
 /*
  When processing a command, its inverse is stored in the undo list (see State).
 
- TODO 
+ TODO
  The list holds elements of type []Undo, because some commands require a multi-level undo.
 
 */
