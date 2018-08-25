@@ -60,15 +60,16 @@ func main() {
 	state.buffer = list.New()
 	state.cutBuffer = list.New()
 	state.undo = list.New()
+	state.prompt = ":" // default prompt
 
 	flag.BoolVar(&state.debug, "d", false, "debug mode")
-	// default is set to true
-	flag.StringVar(&state.prompt, "p", "", "Specifies a command prompt")
+	flag.StringVar(&state.prompt, "p", "", "Specifies a command prompt (default ':')")
 	flag.Parse()
 
-	if state.prompt != "" {
-		state.showPrompt = true
+	if state.prompt == "" {
+		state.prompt = ":" // default prompt
 	}
+	state.showPrompt = true
 
 	state.windowSize = 15 // see https://stackoverflow.com/a/48610796 for a better way...
 
