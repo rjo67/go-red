@@ -58,8 +58,8 @@ var justNumberRE = regexp.MustCompile(`^\s*(\d+)\s*$`)
 var commandLineRE = regexp.MustCompile("(.*?)([acdeEfgGhijklmnpPqQrstuvVwWxyz#=])(.*)")
 
 /*
- * A command, parsed from user input
- */
+ A command, parsed from user input
+*/
 type Command struct {
 	addrRange AddressRange
 	cmd       string
@@ -230,102 +230,9 @@ func (cmd Command) CmdChange(state *State, inputLines *list.List) error {
 	return nil
 }
 
-/*
- Appends the lines in the list 'newLines' to the current buffer, after line #lineNbr.
-
- Afterwards, the state's current line will be set to the last of the new lines just appended.
-
- Special cases:
-   - appending at the last line
-	- appending at "line 0" i.e. before the first line
-*/
-func appendLines(lineNbr int, state *State, newLines *list.List) {
-	// return if newLines is empty
-	if newLines.Len() == 0 {
-		return
-	}
-	if lineNbr == state.buffer.Len() {
-		// append at end
-		state.buffer.PushBackList(newLines)
-		moveToLine(state.buffer.Len(), state)
-	} else if lineNbr == 0 {
-		// append at start
-		state.buffer.PushFrontList(newLines)
-		moveToLine(newLines.Len(), state)
-	} else {
-		moveToLine(lineNbr, state)
-		nbrLinesEntered := 0
-		mark := state.dotline
-		for e := newLines.Front(); e != nil; e = e.Next() {
-			mark = state.buffer.InsertAfter(e.Value, mark)
-			nbrLinesEntered++
-		}
-		moveToLine(lineNbr+nbrLinesEntered, state)
-	}
-}
-
-/*
- Copies (yanks) the addressed lines to the cut buffer.
-
- The cut buffer is overwritten by subsequent 'c', 'd', 'j', 's', or 'y' commands.
- The current address is unchanged.
-*/
-func (cmd Command) CmdYank(state *State) error {
-	currentAddress := state.lineNbr // save for later
-	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state)
-	if err != nil {
-		return err
-	}
-	if startLineNbr == 0 {
-		return invalidLine
-	}
-
-	state.cutBuffer = copyLines(startLineNbr, endLineNbr, state)
-	moveToLine(currentAddress, state)
+func (cmd Command) CmdComment(state *State) error {
+	// does nothing
 	return nil
-}
-
-/*
- Copies the required lines into a new list.
-*/
-func copyLines(startLineNbr, endLineNbr int, state *State) *list.List {
-	tempBuffer := list.New()
-	copyFunc := func(lineNbr int, el *list.Element, state *State) {
-		tempBuffer.PushBack(el.Value)
-	}
-	iterateLines(startLineNbr, endLineNbr, state, copyFunc)
-	return tempBuffer
-}
-
-/*
- Deletes the required lines from the state.buffer and returns them as a new list.
-*/
-func deleteLines(startLineNbr, endLineNbr int, state *State) (newList *list.List) {
-	tempBuffer := list.New()
-	deleteFunc := func(lineNbr int, el *list.Element, state *State) {
-		state.buffer.Remove(el)
-		tempBuffer.PushBack(el.Value)
-	}
-	iterateLines(startLineNbr, endLineNbr, state, deleteFunc)
-	return tempBuffer
-}
-
-/*
- Defines a function which operates on a line
-*/
-type LineProcessorFn func(lineNbr int, el *list.Element, state *State)
-
-/*
- Iterate over the required lines and apply the given function.
-*/
-func iterateLines(startLineNbr, endLineNbr int, state *State, fn LineProcessorFn) {
-	moveToLine(startLineNbr, state)
-	el := state.dotline
-	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr++ {
-		elementCopy := el
-		el = el.Next()
-		fn(lineNbr, elementCopy, state)
-	}
 }
 
 /*
@@ -386,40 +293,6 @@ func (cmd Command) CmdDelete(state *State, addUndo bool) error {
 	return nil
 }
 
-func readInputLines() (newLines *list.List, nbrLinesEntered int, err error) {
-	newLines = list.New()
-	reader := bufio.NewReader(os.Stdin)
-	nbrLinesEntered = 0
-	for quit := false; !quit; {
-		var inputStr string
-		inputStr, err = reader.ReadString('\n')
-		if err != nil {
-			return
-		}
-		if inputStr == ".\n" {
-			quit = true
-		} else {
-			nbrLinesEntered++
-			newLines.PushBack(Line{inputStr})
-		}
-	}
-	return
-}
-
-/*
- Prints the line number of the addressed line.
-
- The current address is unchanged.
-*/
-func (cmd Command) CmdLinenumber(state *State) error {
-	startLineNbr, err := cmd.addrRange.start.calculateActualLineNumber(state)
-	if err != nil {
-		return err
-	}
-	fmt.Println(startLineNbr)
-	return nil
-}
-
 /*
   Edits file, and sets the default filename.
   If file is not specified, then the default filename is used.
@@ -444,44 +317,45 @@ func (cmd Command) CmdEdit(state *State) error {
 }
 
 /*
- Reads file and appends it after the addressed line.
-
- If file is not specified, then the default filename is used.
- If there is no default filename prior to the command, then the default filename is set to file.
- Otherwise, the default filename is unchanged.
-
- The address '0' (zero) is valid for this command; it reads the file at the beginning of the buffer.
-
- The current address is set to the address of the last line read or, if there were none, to the addressed line.
+ Displays a list of the available commands.
 */
-func (cmd Command) CmdRead(state *State) error {
-	filename, err := getFilename(strings.TrimSpace(cmd.restOfCmd), state, false)
-	if err != nil {
-		return err
-	}
-	var startLineNbr int
-	// default is append at eof
-	if !cmd.addrRange.isAddressRangeSpecified() {
-		startLineNbr = state.buffer.Len()
-	} else {
-		startLineNbr, err = cmd.addrRange.start.calculateActualLineNumber(state)
-		if err != nil {
-			return err
-		}
-	}
-	nbrBytesRead, listOfLines, err := ReadFile(filename)
-	if err != nil {
-		return err
-	}
-	fmt.Println(nbrBytesRead)
-	nbrLinesRead := listOfLines.Len()
-	if nbrLinesRead > 0 {
-		appendLines(startLineNbr, state, listOfLines)
-		state.changedSinceLastWrite = true
-		state.addUndo(startLineNbr+1, startLineNbr+listOfLines.Len(), commandDelete, nil, cmd)
-	} else {
-		moveToLine(startLineNbr, state)
-	}
+func (cmd Command) CmdHelp(state *State) error {
+	fmt.Printf("*** %s (v%s)\n", NAME, VERSION)
+	fmt.Println()
+	fmt.Println(" ", commandAppend, "Appends text after the addressed line.")
+	fmt.Println(" ", commandChange, "Changes lines in the buffer.")
+	fmt.Println(" ", commandDelete, "Deletes the addressed lines from the buffer.")
+	fmt.Println(" ", commandEdit, "Edits file, and sets the default filename.")
+	fmt.Println(" ", commandEditUnconditionally, "Edits file regardless of any changes in current buffer.")
+	fmt.Println(" ", commandFilename, "Sets the default filename.")
+	fmt.Println(" ", commandGlobal, "Executes the command-list for all matching lines.")
+	fmt.Println(" ", commandGlobalInteractive, "Interactive 'global'.")
+	fmt.Println(" ", commandHelp, "Displays this help.")
+	fmt.Println(" ", commandInsert, "Inserts text before the addressed line.")
+	fmt.Println(" ", commandJoin, "Joins the addressed lines, replacing them by a single line containing the joined text.")
+	fmt.Println(" ", commandMark, "Marks the current line.")
+	fmt.Println(" ", commandList, "Display the addressed lines.")
+	fmt.Println(" ", commandMove, "Moves lines in the buffer.")
+	fmt.Println(" ", commandNumber, "Displays the addressed lines with line numbers.")
+	fmt.Println(" ", commandPrint, "Prints the addressed lines.")
+	fmt.Println(" ", commandPrompt, "Sets the prompt.")
+	fmt.Println(" ", commandQuit, "Quits the editor.")
+	fmt.Println(" ", commandQuitUnconditionally, "Quits the editor without saving changes.")
+	fmt.Println(" ", commandRead, "Reads file and appends it after the addressed line.")
+	fmt.Println(" ", commandSubstitute, "Replaces text in the addressed lines matching a regular expression.")
+	fmt.Println(" ", commandTransfer, "Copies (transfers) the addressed lines to after the right-hand destination address.")
+	fmt.Println(" ", commandUndo, "Undoes the previous command.")
+	fmt.Println(" ", commandInverseGlobal, "As 'global' but acts on all lines NOT matching the regex.")
+	fmt.Println(" ", commandInverseGlobalInteractive, "Interactive 'inverse-global'.")
+	fmt.Println(" ", commandWrite, "Writes the addressed lines to a file.")
+	fmt.Println(" ", commandWriteAppend, "Appends the addressed lines to a file.")
+	fmt.Println(" ", commandPut, "Copies (puts) the contents of the cut-buffer to after the addressed line.")
+	fmt.Println(" ", commandYank, "Copies (yanks) the addressed lines to the cut-buffer.")
+	fmt.Println(" ", commandScroll, "Scrolls n lines starting at the addressed line.")
+	fmt.Println(" ", commandComment, "Comment -- rest of line will be ignored.")
+	fmt.Println(" ", commandLinenumber, "Prints the line number of the addressed line.")
+	fmt.Println()
+
 	return nil
 }
 
@@ -520,6 +394,20 @@ func (cmd Command) CmdJoin(state *State) error {
 	newLines.PushBack(Line{sb.String()})
 	changeCommand.CmdChange(state, newLines)
 
+	return nil
+}
+
+/*
+ Prints the line number of the addressed line.
+
+ The current address is unchanged.
+*/
+func (cmd Command) CmdLinenumber(state *State) error {
+	startLineNbr, err := cmd.addrRange.start.calculateActualLineNumber(state)
+	if err != nil {
+		return err
+	}
+	fmt.Println(startLineNbr)
 	return nil
 }
 
@@ -579,6 +467,134 @@ func (cmd Command) CmdMove(state *State) error {
 }
 
 /*
+ Prints the addressed lines. The current address is set to the address of the last line printed.
+
+ For command "n": Precedes each line by its line number and a <tab>.
+
+ The current address is set to the address of the last line printed.
+*/
+func (cmd Command) CmdPrint(state *State) error {
+	// no address specified defaults to .
+	if !cmd.addrRange.isAddressRangeSpecified() {
+		startAddr := Address{state.lineNbr, 0}
+		endAddr := Address{state.lineNbr, 0}
+		cmd.addrRange = AddressRange{startAddr, endAddr}
+	}
+	return _printRange(os.Stdout, cmd, state, cmd.cmd == commandNumber)
+}
+
+/*
+ Copies (puts) the contents of the cut buffer to after the addressed line.
+ The current address is set to the address of the last line copied.
+*/
+func (cmd Command) CmdPut(state *State) error {
+	var startLineNbr int
+	var err error
+	// default is append at current line
+	if !cmd.addrRange.isAddressRangeSpecified() {
+		startLineNbr = state.lineNbr
+	} else {
+		if startLineNbr, err = cmd.addrRange.start.calculateActualLineNumber(state); err != nil {
+			return err
+		}
+	}
+	nbrLines := state.cutBuffer.Len()
+	if nbrLines > 0 {
+		appendLines(startLineNbr, state, state.cutBuffer)
+		state.changedSinceLastWrite = true
+		state.addUndo(startLineNbr+1, startLineNbr+nbrLines, commandDelete, nil, cmd)
+	}
+	return nil
+}
+
+/*
+ Reads file and appends it after the addressed line.
+
+ If file is not specified, then the default filename is used.
+ If there is no default filename prior to the command, then the default filename is set to file.
+ Otherwise, the default filename is unchanged.
+
+ The address '0' (zero) is valid for this command; it reads the file at the beginning of the buffer.
+
+ The current address is set to the address of the last line read or, if there were none, to the addressed line.
+*/
+func (cmd Command) CmdRead(state *State) error {
+	filename, err := getFilename(strings.TrimSpace(cmd.restOfCmd), state, false)
+	if err != nil {
+		return err
+	}
+	var startLineNbr int
+	// default is append at eof
+	if !cmd.addrRange.isAddressRangeSpecified() {
+		startLineNbr = state.buffer.Len()
+	} else {
+		startLineNbr, err = cmd.addrRange.start.calculateActualLineNumber(state)
+		if err != nil {
+			return err
+		}
+	}
+	nbrBytesRead, listOfLines, err := ReadFile(filename)
+	if err != nil {
+		return err
+	}
+	fmt.Println(nbrBytesRead)
+	nbrLinesRead := listOfLines.Len()
+	if nbrLinesRead > 0 {
+		appendLines(startLineNbr, state, listOfLines)
+		state.changedSinceLastWrite = true
+		state.addUndo(startLineNbr+1, startLineNbr+listOfLines.Len(), commandDelete, nil, cmd)
+	} else {
+		moveToLine(startLineNbr, state)
+	}
+	return nil
+}
+
+/*
+ Scrolls n lines at a time starting at addressed line, and sets window size to n.
+ The current address is set to the address of the last line printed.
+
+ If n is not specified, then the current window size is used.
+
+ Window size defaults to screen size minus two lines, or to 22 if screen size can't be determined.
+*/
+func (cmd Command) CmdScroll(state *State) error {
+	var startLineNbr, endLineNbr int
+	var err error
+	if !cmd.addrRange.isAddressRangeSpecified() {
+		startLineNbr = state.lineNbr + 1
+	} else {
+		startLineNbr, err = cmd.addrRange.start.calculateActualLineNumber(state)
+		if err != nil {
+			return err
+		}
+	}
+	// check for 'z<n>'
+	if cmd.restOfCmd != "" {
+		// parse to number if possible
+		newWindowSize, err := strconv.Atoi(strings.TrimSpace(cmd.restOfCmd))
+		if err != nil || newWindowSize < 1 {
+			return invalidWindowSize
+		}
+		state.windowSize = newWindowSize
+	}
+	endLineNbr = startLineNbr + state.windowSize
+	// sanitize
+	if startLineNbr == 0 {
+		startLineNbr = 1
+	}
+	if startLineNbr > state.buffer.Len() {
+		startLineNbr = state.buffer.Len()
+	}
+	if endLineNbr > state.buffer.Len() {
+		endLineNbr = state.buffer.Len()
+	}
+	startAddr := Address{startLineNbr, 0}
+	endAddr := Address{endLineNbr, 0}
+	cmd.addrRange = AddressRange{startAddr, endAddr}
+	return _printRange(os.Stdout, cmd, state, true)
+}
+
+/*
  Copies (i.e., transfers) the addressed lines to after the right-hand destination address.
 
  If the destination address is 0, the lines are copied at the beginning of the buffer.
@@ -613,55 +629,6 @@ func (cmd Command) CmdTransfer(state *State) error {
 	// the undo is a delete command from destLineNbr + 1
 	state.addUndo(destLineNbr+1, destLineNbr+tempBuffer.Len(), commandDelete, nil, cmd)
 	return nil
-}
-
-/*
- Copies (puts) the contents of the cut buffer to after the addressed line.
- The current address is set to the address of the last line copied.
-*/
-func (cmd Command) CmdPut(state *State) error {
-	var startLineNbr int
-	var err error
-	// default is append at current line
-	if !cmd.addrRange.isAddressRangeSpecified() {
-		startLineNbr = state.lineNbr
-	} else {
-		if startLineNbr, err = cmd.addrRange.start.calculateActualLineNumber(state); err != nil {
-			return err
-		}
-	}
-	nbrLines := state.cutBuffer.Len()
-	if nbrLines > 0 {
-		appendLines(startLineNbr, state, state.cutBuffer)
-		state.changedSinceLastWrite = true
-		state.addUndo(startLineNbr+1, startLineNbr+nbrLines, commandDelete, nil, cmd)
-	}
-	return nil
-}
-
-/*
- If potentialFilename is set, returns this. If setDefault is TRUE, the state.defaultFilename will
- be set to this filename.
-
- Otherwise, returns the state.defaultFilename.
-
- It is an error if both potentialFilename and state.defaultFilename are empty.
-*/
-func getFilename(potentialFilename string, state *State, setDefault bool) (filename string, err error) {
-	if potentialFilename == "" {
-		// use default if set
-		if state.defaultFilename != "" {
-			filename = state.defaultFilename
-		} else {
-			return "", missingFilename
-		}
-	} else {
-		filename = potentialFilename
-		if setDefault {
-			state.defaultFilename = potentialFilename
-		}
-	}
-	return filename, nil
 }
 
 /*
@@ -713,114 +680,153 @@ func (cmd Command) CmdWrite(state *State) error {
 	return nil
 }
 
-func (cmd Command) CmdComment(state *State) error {
-	// does nothing
-	return nil
-}
-
 /*
- Prints the addressed lines. The current address is set to the address of the last line printed.
+ Copies (yanks) the addressed lines to the cut buffer.
 
- For command "n": Precedes each line by its line number and a <tab>.
-
- The current address is set to the address of the last line printed.
+ The cut buffer is overwritten by subsequent 'c', 'd', 'j', 's', or 'y' commands.
+ The current address is unchanged.
 */
-func (cmd Command) CmdPrint(state *State) error {
-	// no address specified defaults to .
-	if !cmd.addrRange.isAddressRangeSpecified() {
-		startAddr := Address{state.lineNbr, 0}
-		endAddr := Address{state.lineNbr, 0}
-		cmd.addrRange = AddressRange{startAddr, endAddr}
+func (cmd Command) CmdYank(state *State) error {
+	currentAddress := state.lineNbr // save for later
+	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state)
+	if err != nil {
+		return err
 	}
-	return _printRange(os.Stdout, cmd, state, cmd.cmd == commandNumber)
-}
-
-/*
- Scrolls n lines at a time starting at addressed line, and sets window size to n.
- The current address is set to the address of the last line printed.
-
- If n is not specified, then the current window size is used.
-
- Window size defaults to screen size minus two lines, or to 22 if screen size can't be determined.
-*/
-func (cmd Command) CmdScroll(state *State) error {
-	var startLineNbr, endLineNbr int
-	var err error
-	if !cmd.addrRange.isAddressRangeSpecified() {
-		startLineNbr = state.lineNbr + 1
-	} else {
-		startLineNbr, err = cmd.addrRange.start.calculateActualLineNumber(state)
-		if err != nil {
-			return err
-		}
-	}
-	// check for 'z<n>'
-	if cmd.restOfCmd != "" {
-		// parse to number if possible
-		newWindowSize, err := strconv.Atoi(strings.TrimSpace(cmd.restOfCmd))
-		if err != nil || newWindowSize < 1 {
-			return invalidWindowSize
-		}
-		state.windowSize = newWindowSize
-	}
-	endLineNbr = startLineNbr + state.windowSize
-	// sanitize
 	if startLineNbr == 0 {
-		startLineNbr = 1
+		return invalidLine
 	}
-	if startLineNbr > state.buffer.Len() {
-		startLineNbr = state.buffer.Len()
+
+	state.cutBuffer = copyLines(startLineNbr, endLineNbr, state)
+	moveToLine(currentAddress, state)
+	return nil
+}
+
+// ----------------------------------------------------------------------------
+//
+// helper functions
+//
+// ----------------------------------------------------------------------------
+
+/*
+ Appends the lines in the list 'newLines' to the current buffer, after line #lineNbr.
+
+ Afterwards, the state's current line will be set to the last of the new lines just appended.
+
+ Special cases:
+   - appending at the last line
+	- appending at "line 0" i.e. before the first line
+*/
+func appendLines(lineNbr int, state *State, newLines *list.List) {
+	// return if newLines is empty
+	if newLines.Len() == 0 {
+		return
 	}
-	if endLineNbr > state.buffer.Len() {
-		endLineNbr = state.buffer.Len()
+	if lineNbr == state.buffer.Len() {
+		// append at end
+		state.buffer.PushBackList(newLines)
+		moveToLine(state.buffer.Len(), state)
+	} else if lineNbr == 0 {
+		// append at start
+		state.buffer.PushFrontList(newLines)
+		moveToLine(newLines.Len(), state)
+	} else {
+		moveToLine(lineNbr, state)
+		nbrLinesEntered := 0
+		mark := state.dotline
+		for e := newLines.Front(); e != nil; e = e.Next() {
+			mark = state.buffer.InsertAfter(e.Value, mark)
+			nbrLinesEntered++
+		}
+		moveToLine(lineNbr+nbrLinesEntered, state)
 	}
-	startAddr := Address{startLineNbr, 0}
-	endAddr := Address{endLineNbr, 0}
-	cmd.addrRange = AddressRange{startAddr, endAddr}
-	return _printRange(os.Stdout, cmd, state, true)
 }
 
 /*
- Displays a list of the available commands.
+ Copies the required lines into a new list.
 */
-func (cmd Command) CmdHelp(state *State) error {
-	fmt.Printf("*** %s (v%s)\n", NAME, VERSION)
-	fmt.Println()
-	fmt.Println(" ", commandAppend, "Appends text after the addressed line.")
-	fmt.Println(" ", commandChange, "Changes lines in the buffer.")
-	fmt.Println(" ", commandDelete, "Deletes the addressed lines from the buffer.")
-	fmt.Println(" ", commandEdit, "Edits file, and sets the default filename.")
-	fmt.Println(" ", commandEditUnconditionally, "Edits file regardless of any changes in current buffer.")
-	fmt.Println(" ", commandFilename, "Sets the default filename.")
-	fmt.Println(" ", commandGlobal, "Executes the command-list for all matching lines.")
-	fmt.Println(" ", commandGlobalInteractive, "Interactive 'global'.")
-	fmt.Println(" ", commandHelp, "Displays this help.")
-	fmt.Println(" ", commandInsert, "Inserts text before the addressed line.")
-	fmt.Println(" ", commandJoin, "Joins the addressed lines, replacing them by a single line containing the joined text.")
-	fmt.Println(" ", commandMark, "Marks the current line.")
-	fmt.Println(" ", commandList, "Display the addressed lines.")
-	fmt.Println(" ", commandMove, "Moves lines in the buffer.")
-	fmt.Println(" ", commandNumber, "Displays the addressed lines with line numbers.")
-	fmt.Println(" ", commandPrint, "Prints the addressed lines.")
-	fmt.Println(" ", commandPrompt, "Sets the prompt.")
-	fmt.Println(" ", commandQuit, "Quits the editor.")
-	fmt.Println(" ", commandQuitUnconditionally, "Quits the editor without saving changes.")
-	fmt.Println(" ", commandRead, "Reads file and appends it after the addressed line.")
-	fmt.Println(" ", commandSubstitute, "Replaces text in the addressed lines matching a regular expression.")
-	fmt.Println(" ", commandTransfer, "Copies (transfers) the addressed lines to after the right-hand destination address.")
-	fmt.Println(" ", commandUndo, "Undoes the previous command.")
-	fmt.Println(" ", commandInverseGlobal, "As 'global' but acts on all lines NOT matching the regex.")
-	fmt.Println(" ", commandInverseGlobalInteractive, "Interactive 'inverse-global'.")
-	fmt.Println(" ", commandWrite, "Writes the addressed lines to a file.")
-	fmt.Println(" ", commandWriteAppend, "Appends the addressed lines to a file.")
-	fmt.Println(" ", commandPut, "Copies (puts) the contents of the cut-buffer to after the addressed line.")
-	fmt.Println(" ", commandYank, "Copies (yanks) the addressed lines to the cut-buffer.")
-	fmt.Println(" ", commandScroll, "Scrolls n lines starting at the addressed line.")
-	fmt.Println(" ", commandComment, "Comment -- rest of line will be ignored.")
-	fmt.Println(" ", commandLinenumber, "Prints the line number of the addressed line.")
-	fmt.Println()
+func copyLines(startLineNbr, endLineNbr int, state *State) *list.List {
+	tempBuffer := list.New()
+	copyFunc := func(lineNbr int, el *list.Element, state *State) {
+		tempBuffer.PushBack(el.Value)
+	}
+	iterateLines(startLineNbr, endLineNbr, state, copyFunc)
+	return tempBuffer
+}
 
-	return nil
+/*
+ Deletes the required lines from the state.buffer and returns them as a new list.
+*/
+func deleteLines(startLineNbr, endLineNbr int, state *State) (newList *list.List) {
+	tempBuffer := list.New()
+	deleteFunc := func(lineNbr int, el *list.Element, state *State) {
+		state.buffer.Remove(el)
+		tempBuffer.PushBack(el.Value)
+	}
+	iterateLines(startLineNbr, endLineNbr, state, deleteFunc)
+	return tempBuffer
+}
+
+/*
+ Defines a function which operates on a line
+*/
+type LineProcessorFn func(lineNbr int, el *list.Element, state *State)
+
+/*
+ Iterate over the required lines and apply the given function.
+*/
+func iterateLines(startLineNbr, endLineNbr int, state *State, fn LineProcessorFn) {
+	moveToLine(startLineNbr, state)
+	el := state.dotline
+	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr++ {
+		elementCopy := el
+		el = el.Next()
+		fn(lineNbr, elementCopy, state)
+	}
+}
+
+func readInputLines() (newLines *list.List, nbrLinesEntered int, err error) {
+	newLines = list.New()
+	reader := bufio.NewReader(os.Stdin)
+	nbrLinesEntered = 0
+	for quit := false; !quit; {
+		var inputStr string
+		inputStr, err = reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		if inputStr == ".\n" {
+			quit = true
+		} else {
+			nbrLinesEntered++
+			newLines.PushBack(Line{inputStr})
+		}
+	}
+	return
+}
+
+/*
+ If potentialFilename is set, returns this. If setDefault is TRUE, the state.defaultFilename will
+ be set to this filename.
+
+ Otherwise, returns the state.defaultFilename.
+
+ It is an error if both potentialFilename and state.defaultFilename are empty.
+*/
+func getFilename(potentialFilename string, state *State, setDefault bool) (filename string, err error) {
+	if potentialFilename == "" {
+		// use default if set
+		if state.defaultFilename != "" {
+			filename = state.defaultFilename
+		} else {
+			return "", missingFilename
+		}
+	} else {
+		filename = potentialFilename
+		if setDefault {
+			state.defaultFilename = potentialFilename
+		}
+	}
+	return filename, nil
 }
 
 func _printRange(writer io.Writer, cmd Command, state *State, printLineNumbers bool) error {
