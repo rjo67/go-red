@@ -26,8 +26,7 @@ type Line struct {
 /*
  When processing a command, its inverse is stored in the undo list (which is held in State).
 
- TODO
- The list holds elements of type []Undo, because some commands require a multi-level undo.
+ Some commands (e.g. move) require a multi-command undo. This is handled internally using a special command.
 
 */
 type Undo struct {
@@ -63,7 +62,9 @@ type State struct {
 func (state *State) addUndo(start, end int, command string, text *list.List, origCmd Command) {
 	if !state.processingUndo {
 		undoCommand := Undo{Command{AddressRange{Address{start, 0}, Address{end, 0}}, command, ""}, text, origCmd}
-		fmt.Println("added undo:", undoCommand)
+		if state.debug {
+			fmt.Println("added undo:", undoCommand)
+		}
 		state.undo.PushFront(undoCommand)
 	}
 }
@@ -232,7 +233,7 @@ func processCommand(cmd Command, state *State, enteredText *list.List, inGlobalC
 	case commandNoCommand:
 		// nothing entered -- ignore
 	default:
-		fmt.Println("ERROR got command not in switch!?", cmd.cmd)
+		fmt.Println("ERROR got command not in switch!?: ", cmd.cmd)
 	}
 	return quit, err
 }

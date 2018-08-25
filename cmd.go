@@ -46,6 +46,9 @@ const commandScroll string = "z"
 const commandComment string = "#"
 const commandLinenumber string = "="
 
+// this is an internal command to undo the 'move' command (which requires two steps)
+const internalCommandUndoMove string = ")"
+
 // returned when an empty line was entered
 const commandNoCommand string = ""
 
@@ -369,8 +372,7 @@ func (cmd Command) CmdHelp(state *State) error {
  If lines are joined, the current address is set to the address of the joined line.
  Else, the current address is unchanged.
 
-
- TODO: undo
+ Calls internally CmdChange, which is where the undo is handled.
 */
 func (cmd Command) CmdJoin(state *State) error {
 	var startLineNbr, endLineNbr int
@@ -427,7 +429,7 @@ func (cmd Command) CmdLinenumber(state *State) error {
 
  The current address is set to the new address of the last line moved.
 
- TODO: undo
+ Undo is handled by storing the special command 'internalCommandUndoMove'.
 */
 func (cmd Command) CmdMove(state *State) error {
 	// default is current line (for both start/end, and dest)
@@ -469,6 +471,7 @@ func (cmd Command) CmdMove(state *State) error {
 	}
 
 	appendLines(destLineNbr, state, tempBuffer)
+	state.addUndo(destLineNbr+1, destLineNbr+tempBuffer.Len(), internalCommandUndoMove, tempBuffer, cmd)
 	state.changedSinceLastWrite = true
 	return nil
 }
@@ -648,10 +651,18 @@ func (cmd Command) CmdUndo(state *State) error {
 	state.undo.Remove(undoEl)
 	undo := undoEl.Value.(Undo)
 
+	if state.debug {
+		fmt.Println(undo.cmd)
+	}
 	// set global flag to indicate we're undoing
 	state.processingUndo = true
-	fmt.Println(undo.cmd)
-	_, err := processCommand(undo.cmd, state, undo.text, false)
+	var err error
+	// check for the 'special' undo command
+	if undo.cmd.cmd == internalCommandUndoMove {
+		err = handleUndoMove(undo, state)
+	} else {
+		_, err = processCommand(undo.cmd, state, undo.text, false)
+	}
 	state.processingUndo = false
 	return err
 }
@@ -731,6 +742,22 @@ func (cmd Command) CmdYank(state *State) error {
 // helper functions
 //
 // ----------------------------------------------------------------------------
+
+/*
+ Implements the undo for the command 'move'.
+
+ This consists of two operations, unlike all the others
+  - first delete the moved lines
+  - then re-insert
+*/
+func handleUndoMove(undoCmd Undo, state *State) error {
+	// first the delete
+	_ = deleteLines(undoCmd.cmd.addrRange.start.addr, undoCmd.cmd.addrRange.end.addr, state)
+	// then append. The line to append at is stored in the original command
+	appendLines(undoCmd.originalCmd.addrRange.start.addr-1, state, undoCmd.text)
+
+	return nil
+}
 
 /*
  Appends the lines in the list 'newLines' to the current buffer, after line #lineNbr.
