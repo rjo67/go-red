@@ -23,6 +23,19 @@ type Line struct {
 	line string
 }
 
+/*
+ When processing a command, its inverse is stored in the undo list (which is held in State).
+
+ TODO
+ The list holds elements of type []Undo, because some commands require a multi-level undo.
+
+*/
+type Undo struct {
+	cmd         Command    // the command required to undo what has just been changed
+	text        *list.List // text which was changed
+	originalCmd Command    // for when we implement 'redo'
+}
+
 type State struct {
 	// the last line number is accessible via buffer.Len()
 	buffer                *list.List     // the current buffer -- should never be null

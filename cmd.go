@@ -49,10 +49,11 @@ const commandLinenumber string = "="
 // returned when an empty line was entered
 const commandNoCommand string = ""
 
-var notAllowedInGlobalCommand error = errors.New("command cannot be used within 'g'/'v'")
-var unrecognisedCommand error = errors.New("unrecognised command")
-var missingFilename error = errors.New("filename missing and no default set")
 var invalidWindowSize error = errors.New("invalid window size")
+var missingFilename error = errors.New("filename missing and no default set")
+var notAllowedInGlobalCommand error = errors.New("command cannot be used within 'g'/'v'")
+var nothingToUndo error = errors.New("Nothing to undo")
+var unrecognisedCommand error = errors.New("unrecognised command")
 
 var justNumberRE = regexp.MustCompile(`^\s*(\d+)\s*$`)
 var commandLineRE = regexp.MustCompile("(.*?)([acdeEfgGhijklmnpPqQrstuvVwWxyz#=])(.*)")
@@ -298,6 +299,7 @@ func (cmd Command) CmdDelete(state *State, addUndo bool) error {
   If file is not specified, then the default filename is used.
   Any lines in the buffer are deleted before the new file is read.
   The current address is set to the address of the last line in the buffer.
+  Resets undo buffer.
 */
 func (cmd Command) CmdEdit(state *State) error {
 	filename, err := getFilename(strings.TrimSpace(cmd.restOfCmd), state, true)
@@ -366,6 +368,9 @@ func (cmd Command) CmdHelp(state *State) error {
 
  If lines are joined, the current address is set to the address of the joined line.
  Else, the current address is unchanged.
+
+
+ TODO: undo
 */
 func (cmd Command) CmdJoin(state *State) error {
 	var startLineNbr, endLineNbr int
@@ -421,6 +426,8 @@ func (cmd Command) CmdLinenumber(state *State) error {
  It is an error if the destination address falls within the range of moved lines.
 
  The current address is set to the new address of the last line moved.
+
+ TODO: undo
 */
 func (cmd Command) CmdMove(state *State) error {
 	// default is current line (for both start/end, and dest)
@@ -629,6 +636,24 @@ func (cmd Command) CmdTransfer(state *State) error {
 	// the undo is a delete command from destLineNbr + 1
 	state.addUndo(destLineNbr+1, destLineNbr+tempBuffer.Len(), commandDelete, nil, cmd)
 	return nil
+}
+
+func (cmd Command) CmdUndo(state *State) error {
+
+	if state.undo.Len() == 0 {
+		return nothingToUndo
+	}
+
+	undoEl := state.undo.Front()
+	state.undo.Remove(undoEl)
+	undo := undoEl.Value.(Undo)
+
+	// set global flag to indicate we're undoing
+	state.processingUndo = true
+	fmt.Println(undo.cmd)
+	_, err := processCommand(undo.cmd, state, undo.text, false)
+	state.processingUndo = false
+	return err
 }
 
 /*
