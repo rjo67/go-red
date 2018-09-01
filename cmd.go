@@ -49,6 +49,9 @@ const commandLinenumber string = "="
 // this is an internal command to undo the 'move' command (which requires two steps)
 const internalCommandUndoMove string = ")"
 
+// and this is an internal command to undo the 'subst' command (which is 1..n 'change' commands)
+const internalCommandUndoSubst string = "("
+
 // returned when an empty line was entered
 const commandNoCommand string = ""
 
@@ -657,10 +660,13 @@ func (cmd Command) CmdUndo(state *State) error {
 	// set global flag to indicate we're undoing
 	state.processingUndo = true
 	var err error
-	// check for the 'special' undo command
-	if undo.cmd.cmd == internalCommandUndoMove {
+	// cater for the 'special' undo commands
+	switch undo.cmd.cmd {
+	case internalCommandUndoMove:
 		err = handleUndoMove(undo, state)
-	} else {
+	case internalCommandUndoSubst:
+		err = handleUndoSubst(undo, state)
+	default:
 		_, err = processCommand(undo.cmd, state, undo.text, false)
 	}
 	state.processingUndo = false
@@ -756,6 +762,22 @@ func handleUndoMove(undoCmd Undo, state *State) error {
 	// then append. The line to append at is stored in the original command
 	appendLines(undoCmd.originalCmd.addrRange.start.addr-1, state, undoCmd.text)
 
+	return nil
+}
+
+/*
+ Implements the undo for the command 'subst'.
+ This is a list of 1..n undo commands (each of which is a 'change' command).
+*/
+func handleUndoSubst(toplevelUndoCmd Undo, state *State) error {
+	// undo.text == a list of 'change' undo-commands, NOT a list of changed lines
+	for el := toplevelUndoCmd.text.Front(); el != nil; el = el.Next() {
+		undoCmd := el.Value.(Undo)
+		if undoCmd.cmd.cmd != commandChange {
+			panic(fmt.Sprintf("expected 'change' command, got '%s'\n", undoCmd.cmd.cmd))
+		}
+		undoCmd.cmd.CmdChange(state, undoCmd.text)
+	}
 	return nil
 }
 

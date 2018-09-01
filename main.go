@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"runtime"
 	"strings"
+	"time"
 )
 
-const VERSION = "0.1"
+const VERSION = "0.2"
 const NAME = "Rich's ed"
 
 const unsavedChanges string = "buffer has unsaved changes"
@@ -51,6 +53,7 @@ type State struct {
 	defaultFilename       string         // name of the default file
 	windowSize            int            // window size - for scroll command
 	debug                 bool           // cmdline flag: debugging activated?
+	showMemory            bool           // cmdline flag: show memory stats?
 	prompt                string         // cmdline flag: the prompt string
 	showPrompt            bool           // whether to show the prompt
 }
@@ -77,6 +80,7 @@ func main() {
 	state.prompt = ":" // default prompt
 
 	flag.BoolVar(&state.debug, "d", false, "debug mode")
+	flag.BoolVar(&state.showMemory, "m", false, "show memory usage")
 	flag.StringVar(&state.prompt, "p", "", "Specifies a command prompt (default ':')")
 	flag.Parse()
 
@@ -94,6 +98,9 @@ func mainloop(state *State) {
 	reader := bufio.NewReader(os.Stdin)
 	quit := false
 	for !quit {
+		if state.showMemory {
+			fmt.Printf("%s ", GetMemUsage())
+		}
 		if state.showPrompt {
 			fmt.Print(state.prompt, " ")
 		}
@@ -236,4 +243,21 @@ func processCommand(cmd Command, state *State, enteredText *list.List, inGlobalC
 		fmt.Println("ERROR got command not in switch!?: ", cmd.cmd)
 	}
 	return quit, err
+}
+
+// from https://golangcode.com/print-the-current-memory-usage/
+func GetMemUsage() string {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	nbrGC := m.NumGC
+	gcStr := ""
+	if nbrGC > 0 {
+		lastGC := time.Unix(0, int64(m.LastGC))
+		gcStr = fmt.Sprintf(", GC(#%d @ %s)", nbrGC, lastGC.Format(time.Kitchen))
+	}
+	return fmt.Sprintf("Heap=%v MiB, Sys=%v MiB%s", bToMb(m.HeapAlloc), bToMb(m.Sys), gcStr)
+}
+
+func bToMb(b uint64) uint64 {
+	return b / 1024 / 1024
 }

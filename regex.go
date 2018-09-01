@@ -1,7 +1,7 @@
 package main
 
 import (
-	//"container/list"
+	"container/list"
 	"errors"
 	"fmt"
 	"io"
@@ -98,6 +98,8 @@ func (cmd Command) CmdGlobal(state *State) error {
 	 The 'p' suffix toggles the print suffixes of the last substitution.
 	 The 'r' suffix causes the re of the last search to be used instead of the re of the last
 	 substitution (if the search happened after the substitution).
+
+ Undo is handled by a 'special' internal command 'internalCommandUndoSubst'.
 */
 func (cmd Command) CmdSubstitute(state *State) error {
 
@@ -107,17 +109,18 @@ func (cmd Command) CmdSubstitute(state *State) error {
 	}
 
 	var nbrLinesChanged int
+	var undoList *list.List
 	regexCommand := strings.TrimSpace(cmd.restOfCmd)
 	if regexCommand != "" {
 		re, replacement, suffixes, err := parseRegexCommand(regexCommand)
 		if err != nil {
 			return err
 		}
-		nbrLinesChanged, err = processLines(os.Stdout, startLineNbr, endLineNbr, state, re, replacement, suffixes)
+		nbrLinesChanged, undoList, err = processLines(os.Stdout, startLineNbr, endLineNbr, state, re, replacement, suffixes)
 	} else {
 		// TODO need to handle flags on a pure "s" command
 		suffixes := strings.TrimSpace(cmd.restOfCmd)
-		nbrLinesChanged, err = processLinesUsingPreviousSubst(os.Stdout, startLineNbr, endLineNbr, state, suffixes)
+		nbrLinesChanged, undoList, err = processLinesUsingPreviousSubst(os.Stdout, startLineNbr, endLineNbr, state, suffixes)
 	}
 
 	if err != nil {
@@ -126,6 +129,13 @@ func (cmd Command) CmdSubstitute(state *State) error {
 	if nbrLinesChanged == 0 {
 		return noSubstitutions
 	}
+
+	fmt.Printf("%d lines changed\n", nbrLinesChanged)
+
+	if undoList.Len() != nbrLinesChanged {
+		panic(fmt.Sprintf("changed %d lines but undoList contains %d elements", nbrLinesChanged, undoList.Len()))
+	}
+	state.addUndo(1, 1, internalCommandUndoSubst, undoList, cmd)
 
 	state.changedSinceLastWrite = true
 	return nil
@@ -143,8 +153,13 @@ func parseRegexCommand(regexCommand string) (re, replacement, suffixes string, e
 /*
  Repeats the previous substitution if one is present in state.
  suffixes: gpln or <count> (see doc)
+
+ Returns:
+  - number of lines matched
+  - a list of undo objects to undo these changes (empty list if no lines changed)
 */
-func processLinesUsingPreviousSubst(writer io.Writer, startLineNbr, endLineNbr int, state *State, suffixes string) (int, error) {
+func processLinesUsingPreviousSubst(writer io.Writer, startLineNbr, endLineNbr int,
+	state *State, suffixes string) (int, *list.List, error) {
 	if state.lastSubstRE != nil {
 		// if no suffixes defined, use previously stored
 		if suffixes == "" {
@@ -152,7 +167,7 @@ func processLinesUsingPreviousSubst(writer io.Writer, startLineNbr, endLineNbr i
 		}
 		return replaceLines(writer, startLineNbr, endLineNbr, state, state.lastSubstRE, state.lastSubstReplacement, suffixes)
 	} else {
-		return 0, noPreviousRegex
+		return 0, nil, noPreviousRegex
 	}
 }
 
@@ -160,12 +175,17 @@ func processLinesUsingPreviousSubst(writer io.Writer, startLineNbr, endLineNbr i
  Replace lines between start and end matching 'reStr'.
  suffixes: gpln or <count> (see doc)
 
+ Returns:
+  - number of lines matched
+  - a list of undo objects to undo these changes (empty list if no lines changed)
+
  Sets state.lastSubstRE, state.lastSubstReplacement, state.lastSubstSuffixes
 */
-func processLines(writer io.Writer, startLineNbr, endLineNbr int, state *State, reStr, replacement, suffixes string) (int, error) {
+func processLines(writer io.Writer, startLineNbr, endLineNbr int,
+	state *State, reStr, replacement, suffixes string) (int, *list.List, error) {
 	re, err := regexp.Compile(reStr)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	state.lastSubstRE = re
 	state.lastSubstReplacement = replacement
@@ -176,11 +196,13 @@ func processLines(writer io.Writer, startLineNbr, endLineNbr int, state *State, 
 /*
  Replace lines between start and end matching the given regexp.
  suffixes: gpln or <count> (see doc)
-*/
-func replaceLines(writer io.Writer, startLineNbr, endLineNbr int, state *State, re *regexp.Regexp, replacement, suffixes string) (int, error) {
 
-	moveToLine(startLineNbr, state)
-	nbrLinesMatched := 0
+ Returns:
+  - number of lines matched
+  - a list of undo objects to undo these changes (empty list if no lines changed)
+*/
+func replaceLines(writer io.Writer, startLineNbr, endLineNbr int,
+	state *State, re *regexp.Regexp, replacement, suffixes string) (int, *list.List, error) {
 
 	// evaluate suffixes
 	printLineNumbers := strings.Contains(suffixes, suffixNumber)
@@ -191,6 +213,10 @@ func replaceLines(writer io.Writer, startLineNbr, endLineNbr int, state *State, 
 		printLine = true
 	}
 	//global := strings.Contains(suffixes, suffixGlobal)
+
+	moveToLine(startLineNbr, state)
+	nbrLinesMatched := 0
+	undoList := list.New()
 
 	el := state.dotline
 	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr++ {
@@ -203,9 +229,15 @@ func replaceLines(writer io.Writer, startLineNbr, endLineNbr int, state *State, 
 				_printLine(writer, lineNbr, changedLine, printLineNumbers)
 			}
 			el.Value = Line{changedLine}
+			// create undo command -- is handled as a 'change' on this line
+			currentLine := Address{lineNbr, 0}
+			undoCommand := Command{AddressRange{currentLine, currentLine}, commandChange, ""}
+			tmpList := list.New()
+			tmpList.PushFront(line)
+			undoList.PushBack(Undo{undoCommand, tmpList, Command{} /* TODO */})
 		}
 
 		el = el.Next()
 	}
-	return nbrLinesMatched, nil
+	return nbrLinesMatched, undoList, nil
 }
