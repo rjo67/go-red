@@ -15,7 +15,7 @@ func TestDelete(t *testing.T) {
 	var buff bytes.Buffer               // implements io.Writer
 	var writer = bufio.NewWriter(&buff) // -> bufio
 
-	err := cmd.CmdDelete(&state)
+	err := cmd.CmdDelete(&state, true)
 	if err != nil {
 		t.Fatalf("error %s", err)
 	}
@@ -31,7 +31,7 @@ func TestDelete(t *testing.T) {
 	state.buffer = createListOfLines([]string{"1", "2", "3", "4", "5"})
 	cmd = Command{AddressRange{Address{addr: 1}, Address{addr: 5}}, commandDelete, ""}
 	buff.Reset()
-	err = cmd.CmdDelete(&state)
+	err = cmd.CmdDelete(&state, true)
 	if err != nil {
 		t.Fatalf("error %s", err)
 	}

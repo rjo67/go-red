@@ -12,7 +12,7 @@ func TestSubstitute(t *testing.T) {
 	// to capture the output
 	var buff bytes.Buffer // implements io.Writer
 
-	nbrLinesChanged, err := processLines(&buff, 2, state.buffer.Len(), &state, "rjo", "foobar", "gp")
+	nbrLinesChanged, _, err := processLines(&buff, 2, state.buffer.Len(), &state, "rjo", "foobar", "gp")
 	if err != nil {
 		t.Fatalf("error %s", err)
 	}
