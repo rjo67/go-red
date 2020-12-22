@@ -16,13 +16,12 @@ const suffixList string = "l"   // list
 const suffixNumber string = "n" // number
 const suffixPrint string = "p"  // print
 
-var syntaxMissingDelimiter error = errors.New("Missing delimiter")
-var noSubstitutions error = errors.New("No substitution performed")
-var noPreviousRegex error = errors.New("No previous regex")
+var errSyntaxMissingDelimiter error = errors.New("Missing delimiter")
+var errNoSubstitutions error = errors.New("No substitution performed")
+var errNoPreviousRegex error = errors.New("No previous regex")
 
 /*
- Global command.
- The global command makes two passes over the file.
+CmdGlobal processes the global command, which makes two passes over the file.
  On the first pass, all the addressed lines matching a regular expression re are marked.
  Then, going sequentially from the beginning of the file to the end of the file,
  the given command-list is executed for each marked line,
@@ -57,8 +56,7 @@ func (cmd Command) CmdGlobal(state *State) error {
 }
 
 /*
- Substitute command.
- Replaces text in the addressed lines matching a regular expression re with replacement.
+CmdSubstitute replaces text in the addressed lines matching a regular expression re with replacement.
  By default, only the first match in each line is replaced.
 
  The 's' command accepts any combination of the suffixes 'g', 'count', 'l', 'n', and 'p'.
@@ -127,7 +125,7 @@ func (cmd Command) CmdSubstitute(state *State) error {
 		return err
 	}
 	if nbrLinesChanged == 0 {
-		return noSubstitutions
+		return errNoSubstitutions
 	}
 
 	fmt.Printf("%d lines changed\n", nbrLinesChanged)
@@ -145,7 +143,7 @@ func parseRegexCommand(regexCommand string) (re, replacement, suffixes string, e
 	delimiter := regexCommand[0:1]
 	split := strings.Split(regexCommand, delimiter)
 	if len(split) != 4 || split[1] == "" {
-		return "", "", "", syntaxMissingDelimiter
+		return "", "", "", errSyntaxMissingDelimiter
 	}
 	return split[1], split[2], split[3], nil
 }
@@ -166,9 +164,8 @@ func processLinesUsingPreviousSubst(writer io.Writer, startLineNbr, endLineNbr i
 			suffixes = state.lastSubstSuffixes
 		}
 		return replaceLines(writer, startLineNbr, endLineNbr, state, state.lastSubstRE, state.lastSubstReplacement, suffixes)
-	} else {
-		return 0, nil, noPreviousRegex
 	}
+	return 0, nil, errNoPreviousRegex
 }
 
 /*

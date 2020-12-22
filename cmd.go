@@ -55,17 +55,17 @@ const internalCommandUndoSubst string = "("
 // returned when an empty line was entered
 const commandNoCommand string = ""
 
-var invalidWindowSize error = errors.New("invalid window size")
-var missingFilename error = errors.New("filename missing and no default set")
-var notAllowedInGlobalCommand error = errors.New("command cannot be used within 'g'/'v'")
-var nothingToUndo error = errors.New("Nothing to undo")
-var unrecognisedCommand error = errors.New("unrecognised command")
+var errInvalidWindowSize error = errors.New("invalid window size")
+var errMissingFilename error = errors.New("filename missing and no default set")
+var errNotAllowedInGlobalCommand error = errors.New("command cannot be used within 'g'/'v'")
+var errNothingToUndo error = errors.New("Nothing to undo")
+var errUnrecognisedCommand error = errors.New("unrecognised command")
 
 var justNumberRE = regexp.MustCompile(`^\s*(\d+)\s*$`)
 var commandLineRE = regexp.MustCompile("(.*?)([acdeEfgGhijklmnpPqQrstuvVwWxyz#=])(.*)")
 
 /*
- A command, parsed from user input
+Command stores the command which has been parsed from user input
 */
 type Command struct {
 	addrRange AddressRange
@@ -73,6 +73,9 @@ type Command struct {
 	restOfCmd string
 }
 
+/*
+ParseCommand parses a command from the given string.
+*/
 func ParseCommand(str string) (cmd Command, err error) {
 	if strings.TrimSpace(str) == "" {
 		// newline alone == +1p
@@ -108,14 +111,14 @@ func ParseCommand(str string) (cmd Command, err error) {
 			return Command{addrRange, cmdString, restOfCmd}, nil
 		}
 	} else {
-		return Command{}, unrecognisedCommand
+		return Command{}, errUnrecognisedCommand
 	}
 }
 
 /*
- Appends text to the buffer after the addressed line.
+CmdAppendInsert appends text to the buffer after the addressed line.
  or
- Inserts text in the buffer before the addressed line.
+inserts text in the buffer before the addressed line.
 
  The address '0' (zero) is valid for this command;
    append: it places the entered text at the beginning of the buffer.
@@ -177,7 +180,7 @@ func (cmd Command) CmdAppendInsert(state *State, inputLines *list.List) error {
 }
 
 /*
- Changes lines in the buffer.
+CmdChange changes lines in the buffer.
 
  The addressed lines are deleted from the buffer, and text is inserted in their place.
 
@@ -194,7 +197,7 @@ func (cmd Command) CmdChange(state *State, inputLines *list.List) error {
 		return err
 	}
 	if startLineNbr == 0 {
-		return invalidLine
+		return errInvalidLine
 	}
 
 	var newLines *list.List
@@ -215,17 +218,17 @@ func (cmd Command) CmdChange(state *State, inputLines *list.List) error {
 	deleteCmd.CmdDelete(state, false)
 	// what's deleted is stored in the cutBuffer
 
-	var atEof bool
+	var atEOF bool
 
 	// adjust the starting lineNbr if we've deleted at the end of the file
 	if startLineNbr > state.buffer.Len() {
 		startLineNbr = state.buffer.Len()
-		atEof = true
+		atEOF = true
 	}
 
 	state.changedSinceLastWrite = true
 
-	if atEof {
+	if atEOF {
 		appendLines(startLineNbr, state, newLines)
 		// "change" is its own inverse
 		state.addUndo(startLineNbr+1, startLineNbr+newLines.Len(), commandChange, state.cutBuffer, cmd)
@@ -237,13 +240,16 @@ func (cmd Command) CmdChange(state *State, inputLines *list.List) error {
 	return nil
 }
 
+/*
+CmdComment processes comments.
+*/
 func (cmd Command) CmdComment(state *State) error {
 	// does nothing
 	return nil
 }
 
 /*
- Deletes the addressed lines from the buffer.
+CmdDelete deletes the addressed lines from the buffer.
 
  The current address is set to the new address of the line after the last line deleted;
  if the lines deleted were originally at the end of the buffer,
@@ -261,7 +267,7 @@ func (cmd Command) CmdDelete(state *State, addUndo bool) error {
 		return err
 	}
 	if startLineNbr == 0 {
-		return invalidLine
+		return errInvalidLine
 	}
 
 	tempBuffer := deleteLines(startLineNbr, endLineNbr, state)
@@ -301,7 +307,7 @@ func (cmd Command) CmdDelete(state *State, addUndo bool) error {
 }
 
 /*
-  Edits file, and sets the default filename.
+CmdEdit edits file, and sets the default filename.
   If file is not specified, then the default filename is used.
   Any lines in the buffer are deleted before the new file is read.
   The current address is set to the address of the last line in the buffer.
@@ -325,7 +331,7 @@ func (cmd Command) CmdEdit(state *State) error {
 }
 
 /*
- Displays a list of the available commands.
+CmdHelp displays a list of the available commands.
 */
 func (cmd Command) CmdHelp(state *State) error {
 	fmt.Printf("*** %s (v%s)\n", NAME, VERSION)
@@ -368,7 +374,7 @@ func (cmd Command) CmdHelp(state *State) error {
 }
 
 /*
- Joins the addressed lines, replacing them by a single line containing their joined text.
+CmdJoin joins the addressed lines, replacing them by a single line containing their joined text.
 
  If only one address is given, this command does nothing.
 
@@ -408,7 +414,7 @@ func (cmd Command) CmdJoin(state *State) error {
 }
 
 /*
- Prints the line number of the addressed line.
+CmdLinenumber prints the line number of the addressed line.
 
  The current address is unchanged.
 */
@@ -422,7 +428,7 @@ func (cmd Command) CmdLinenumber(state *State) error {
 }
 
 /*
- Moves lines in the buffer.
+CmdMove moves lines in the buffer.
 
  The addressed lines are moved to after the right-hand destination address.
  The destination address '0' (zero) is valid for this command;
@@ -448,18 +454,18 @@ func (cmd Command) CmdMove(state *State) error {
 	} else {
 		var destLine Address
 		if destLine, err = newAddress(destStr); err != nil {
-			return invalidDestinationAddress
+			return errInvalidDestinationAddress
 		}
 		if destLineNbr, err = destLine.calculateActualLineNumber(state); err != nil {
 			return err
 		}
 	}
 	if startLineNbr == 0 || destLineNbr > state.buffer.Len() {
-		return invalidDestinationAddress
+		return errInvalidDestinationAddress
 	}
 	// it is an error if the destination address falls within the range of moved lines
 	if destLineNbr >= startLineNbr && destLineNbr < endLineNbr {
-		return invalidDestinationAddress
+		return errInvalidDestinationAddress
 	}
 
 	// delete the lines
@@ -480,7 +486,7 @@ func (cmd Command) CmdMove(state *State) error {
 }
 
 /*
- Prints the addressed lines. The current address is set to the address of the last line printed.
+CmdPrint prints the addressed lines. The current address is set to the address of the last line printed.
 
  For command "n": Precedes each line by its line number and a <tab>.
 
@@ -497,7 +503,7 @@ func (cmd Command) CmdPrint(state *State) error {
 }
 
 /*
- Copies (puts) the contents of the cut buffer to after the addressed line.
+CmdPut copies (puts) the contents of the cut buffer to after the addressed line.
  The current address is set to the address of the last line copied.
 */
 func (cmd Command) CmdPut(state *State) error {
@@ -521,7 +527,7 @@ func (cmd Command) CmdPut(state *State) error {
 }
 
 /*
- Reads file and appends it after the addressed line.
+CmdRead reads file and appends it after the addressed line.
 
  If file is not specified, then the default filename is used.
  If there is no default filename prior to the command, then the default filename is set to file.
@@ -563,7 +569,7 @@ func (cmd Command) CmdRead(state *State) error {
 }
 
 /*
- Scrolls n lines at a time starting at addressed line, and sets window size to n.
+CmdScroll scrolls n lines at a time starting at addressed line, and sets window size to n.
  The current address is set to the address of the last line printed.
 
  If n is not specified, then the current window size is used.
@@ -586,7 +592,7 @@ func (cmd Command) CmdScroll(state *State) error {
 		// parse to number if possible
 		newWindowSize, err := strconv.Atoi(strings.TrimSpace(cmd.restOfCmd))
 		if err != nil || newWindowSize < 1 {
-			return invalidWindowSize
+			return errInvalidWindowSize
 		}
 		state.windowSize = newWindowSize
 	}
@@ -608,7 +614,7 @@ func (cmd Command) CmdScroll(state *State) error {
 }
 
 /*
- Copies (i.e., transfers) the addressed lines to after the right-hand destination address.
+CmdTransfer copies (i.e., transfers) the addressed lines to after the right-hand destination address.
 
  If the destination address is 0, the lines are copied at the beginning of the buffer.
 
@@ -626,14 +632,14 @@ func (cmd Command) CmdTransfer(state *State) error {
 	} else {
 		var destLine Address
 		if destLine, err = newAddress(destStr); err != nil {
-			return invalidDestinationAddress
+			return errInvalidDestinationAddress
 		}
 		if destLineNbr, err = destLine.calculateActualLineNumber(state); err != nil {
 			return err
 		}
 	}
 	if destLineNbr > state.buffer.Len() {
-		return invalidDestinationAddress
+		return errInvalidDestinationAddress
 	}
 	tempBuffer := copyLines(startLineNbr, endLineNbr, state)
 	appendLines(destLineNbr, state, tempBuffer)
@@ -644,10 +650,13 @@ func (cmd Command) CmdTransfer(state *State) error {
 	return nil
 }
 
+/*
+CmdUndo undoes the previous command.
+*/
 func (cmd Command) CmdUndo(state *State) error {
 
 	if state.undo.Len() == 0 {
-		return nothingToUndo
+		return errNothingToUndo
 	}
 
 	undoEl := state.undo.Front()
@@ -674,7 +683,7 @@ func (cmd Command) CmdUndo(state *State) error {
 }
 
 /*
- Handles the commands "w", "wq", and "W".
+CmdWrite handles the commands "w", "wq", and "W".
 
  Writes (or appends in case of W) the addressed lines to file.
  Any previous contents of file is lost without warning.
@@ -709,7 +718,7 @@ func (cmd Command) CmdWrite(state *State) error {
 	}
 	// disallow 0
 	if startLineNbr == 0 {
-		return invalidLine
+		return errInvalidLine
 	}
 	moveToLine(startLineNbr, state)
 	nbrBytesWritten, err := WriteFile(filename, state.dotline, startLineNbr, endLineNbr)
@@ -723,7 +732,7 @@ func (cmd Command) CmdWrite(state *State) error {
 }
 
 /*
- Copies (yanks) the addressed lines to the cut buffer.
+CmdYank copies (yanks) the addressed lines to the cut buffer.
 
  The cut buffer is overwritten by subsequent 'c', 'd', 'j', 's', or 'y' commands.
  The current address is unchanged.
@@ -735,7 +744,7 @@ func (cmd Command) CmdYank(state *State) error {
 		return err
 	}
 	if startLineNbr == 0 {
-		return invalidLine
+		return errInvalidLine
 	}
 
 	state.cutBuffer = copyLines(startLineNbr, endLineNbr, state)
@@ -841,7 +850,7 @@ func deleteLines(startLineNbr, endLineNbr int, state *State) (newList *list.List
 }
 
 /*
- Defines a function which operates on a line
+A LineProcessorFn is a function which operates on a line
 */
 type LineProcessorFn func(lineNbr int, el *list.Element, state *State)
 
@@ -892,7 +901,7 @@ func getFilename(potentialFilename string, state *State, setDefault bool) (filen
 		if state.defaultFilename != "" {
 			filename = state.defaultFilename
 		} else {
-			return "", missingFilename
+			return "", errMissingFilename
 		}
 	} else {
 		filename = potentialFilename
@@ -910,7 +919,7 @@ func _printRange(writer io.Writer, cmd Command, state *State, printLineNumbers b
 	}
 	// disallow 0p
 	if startLineNbr == 0 {
-		return invalidLine
+		return errInvalidLine
 	}
 	if endLineNbr == 0 {
 		endLineNbr = 1

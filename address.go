@@ -22,13 +22,16 @@ const notSpecified int = -4
 
 var _ = fmt.Printf // For debugging; delete when done.
 
-var invalidLine error = errors.New("invalid line in address range")
-var invalidDestinationAddress error = errors.New("invalid line for destination")
-var unrecognisedRange error = errors.New("unrecognised address range")
-var unrecognisedAddress error = errors.New("unrecognised address")
-var badRange error = errors.New("address range start > end")
-var rangeShouldNotBeSpecified error = errors.New("a range may not be specified")
+var errInvalidLine error = errors.New("invalid line in address range")
+var errInvalidDestinationAddress error = errors.New("invalid line for destination")
+var errUnrecognisedRange error = errors.New("unrecognised address range")
+var errUnrecognisedAddress error = errors.New("unrecognised address")
+var errBadRange error = errors.New("address range start > end")
+var errRangeShouldNotBeSpecified error = errors.New("a range may not be specified")
 
+/*
+An Address stores a line number with optional offset
+*/
 type Address struct {
 	addr   int
 	offset int // only set for +n, -n etc
@@ -84,7 +87,7 @@ func newAddress(addrStr string) (Address, error) {
 			// last try: just a number
 			addrInt, err := strconv.Atoi(addrStr)
 			if err != nil {
-				return Address{}, unrecognisedAddress
+				return Address{}, errUnrecognisedAddress
 			} else {
 				return Address{addr: addrInt}, nil
 			}
@@ -118,13 +121,13 @@ func handlePlusMinusNumber(addrStr string) (Address, error) {
 		case "+":
 			sign = 1
 		default:
-			return Address{}, unrecognisedAddress
+			return Address{}, errUnrecognisedAddress
 		}
 		nbrStr := matches[0][2]
 		var nbr int
 		var err error
 		if nbrStr == "" { // if empty, throw error
-			return Address{}, unrecognisedAddress
+			return Address{}, errUnrecognisedAddress
 		} else {
 			nbr, err = strconv.Atoi(nbrStr)
 			if err != nil {
@@ -133,7 +136,7 @@ func handlePlusMinusNumber(addrStr string) (Address, error) {
 		}
 		return Address{addr: currentLine, offset: nbr * sign}, nil
 	}
-	return Address{}, unrecognisedAddress
+	return Address{}, errUnrecognisedAddress
 }
 
 /*
@@ -151,20 +154,23 @@ func (address Address) calculateActualLineNumber(state *State) (int, error) {
 		lineNbr = 1 + address.offset
 	case address.addr == endOfFile:
 		if address.offset > 0 {
-			return -1, invalidLine
+			return -1, errInvalidLine
 		}
 		lineNbr = state.buffer.Len() + address.offset
 	}
 	if lineNbr > state.buffer.Len() {
-		return -1, invalidLine
+		return -1, errInvalidLine
 	}
 	if lineNbr < 0 || lineNbr > state.buffer.Len() {
-		return -1, invalidLine
+		return -1, errInvalidLine
 	} else {
 		return lineNbr, nil
 	}
 }
 
+/*
+An AddressRange stores the start and end addresses of a range.
+*/
 type AddressRange struct {
 	start, end Address
 }
@@ -177,9 +183,8 @@ type AddressRange struct {
 func (ra AddressRange) getAddressRange(state *State) (startLine int, endLine int, err error) {
 	if !ra.isAddressRangeSpecified() {
 		return state.lineNbr, state.lineNbr, nil
-	} else {
-		return ra.calculateStartAndEndLineNumbers(state)
 	}
+	return ra.calculateStartAndEndLineNumbers(state)
 }
 
 /*
@@ -253,7 +258,7 @@ func newRange(rangeStr string) (addrRange AddressRange, err error) {
 		matches := addrRangeRE.FindAllStringSubmatch(rangeStr, -1)
 		// we expect two matches
 		if len(matches) != 1 || len(matches[0]) != 3 {
-			return addrRange, unrecognisedRange
+			return addrRange, errUnrecognisedRange
 		}
 
 		startRange := matches[0][1]
@@ -281,7 +286,7 @@ func newRange(rangeStr string) (addrRange AddressRange, err error) {
 
 	// start must be before end ('special' values excluded)
 	if start.addr >= 0 && end.addr >= 0 && start.addr > end.addr {
-		return addrRange, badRange
+		return addrRange, errBadRange
 	}
 	return AddressRange{start, end}, nil
 }

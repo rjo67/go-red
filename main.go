@@ -6,30 +6,34 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"regexp"
 	"runtime"
 	"strings"
 	"time"
 )
 
-const VERSION = "0.2"
+/*
+VERSION is the program version
+*/
+const VERSION = "0.3"
+
+/*
+NAME is the progam name
+*/
 const NAME = "Rich's ed"
 
 const unsavedChanges string = "buffer has unsaved changes"
 
-/**
- * Stores information about a line.
- * The line number is not stored, this is implicit.
- */
+/*
+A Line stores information about a line.
+  The line number is not stored, this is implicit.
+*/
 type Line struct {
 	line string
 }
 
 /*
- When processing a command, its inverse is stored in the undo list (which is held in State).
-
+Undo stores information about the inverse of the current command, and is stored in the undo list (which is held in State).
  Some commands (e.g. move) require a multi-command undo. This is handled internally using a special command.
-
 */
 type Undo struct {
 	cmd         Command    // the command required to undo what has just been changed
@@ -125,7 +129,7 @@ func mainloop(state *State) {
 					commandQuit, commandQuitUnconditionally,
 					commandUndo:
 					if cmd.addrRange.isAddressRangeSpecified() {
-						err = rangeShouldNotBeSpecified
+						err = errRangeShouldNotBeSpecified
 					}
 				default:
 					//ok
@@ -164,7 +168,7 @@ func processCommand(cmd Command, state *State, enteredText *list.List, inGlobalC
 			commandHelp,
 			commandQuit, commandQuitUnconditionally,
 			commandUndo, commandWrite, commandWriteAppend:
-			return false, notAllowedInGlobalCommand
+			return false, errNotAllowedInGlobalCommand
 		default:
 			//ok
 		}

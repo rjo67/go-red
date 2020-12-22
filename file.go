@@ -3,19 +3,20 @@ package main
 import (
 	"bufio"
 	"container/list"
+
 	//"fmt"
 	"io"
 	"os"
 )
 
 /*
- * Reads the entire file identified by 'filename'.
- * Each line is added to a list structure which is returned.
- * The number of bytes read is also returned.
- * Non-EOF errors are returned in the error variable.
- *
- * The file is closed when this function returns.
- */
+ReadFile reads the entire file identified by 'filename'.
+ Each line is added to a list structure which is returned.
+ The number of bytes read is also returned.
+ Non-EOF errors are returned in the error variable.
+
+ The file is closed when this function returns.
+*/
 func ReadFile(filename string) (nbrBytesRead int, listOfLines *list.List, err error) {
 	file, err := os.Open(filename)
 
@@ -31,11 +32,11 @@ func ReadFile(filename string) (nbrBytesRead int, listOfLines *list.List, err er
 }
 
 /*
- * Reads the entire contents of the 'reader'.
- * Each line is added to a list structure which is returned.
- * The number of bytes read is also returned.
- * Non-EOF errors are returned in the error variable.
- */
+ReadReader reads the entire contents of the 'reader'.
+ Each line is added to a list structure which is returned.
+ The number of bytes read is also returned.
+ Non-EOF errors are returned in the error variable.
+*/
 func ReadReader(reader *bufio.Reader) (nbrBytesRead int, listOfLines *list.List, err error) {
 
 	listOfLines = list.New()
@@ -67,7 +68,7 @@ func ReadReader(reader *bufio.Reader) (nbrBytesRead int, listOfLines *list.List,
 }
 
 /*
- Writes the list contents to a file identified by 'filename'.
+WriteFile writes the list contents to a file identified by 'filename'.
  Starts at element 'startElement' of the list, which is identified as line# 'startLineNbr'.
  Will then iterate through til 'endLineNbr'.
 
@@ -91,9 +92,9 @@ func WriteFile(filename string, startElement *list.Element, startLineNbr, endLin
 }
 
 /*
- * Writes the given list to the 'writer'.
- * The number of bytes written is returned.
- */
+WriteWriter writes the given list to the 'writer'.
+ The number of bytes written is returned.
+*/
 func WriteWriter(w *bufio.Writer, startElement *list.Element, startLineNbr, endLineNbr int) (nbrBytesWritten int, err error) {
 	el := startElement
 	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr++ {
