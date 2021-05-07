@@ -1,4 +1,4 @@
-package main
+package red
 
 import (
 	"errors"
@@ -27,7 +27,7 @@ var errInvalidDestinationAddress error = errors.New("invalid line for destinatio
 var errUnrecognisedRange error = errors.New("unrecognised address range")
 var errUnrecognisedAddress error = errors.New("unrecognised address")
 var errBadRange error = errors.New("address range start > end")
-var errRangeShouldNotBeSpecified error = errors.New("a range may not be specified")
+var ErrRangeShouldNotBeSpecified error = errors.New("a range may not be specified")
 
 /*
 An Address stores a line number with optional offset
@@ -144,6 +144,7 @@ func handlePlusMinusNumber(addrStr string) (Address, error) {
 */
 func (address Address) calculateActualLineNumber(state *State) (int, error) {
 	var lineNbr int = -99
+	//fmt.Printf("addr: %v\n", address)
 	switch {
 	case address.addr >= 0:
 		// an actual line number has been specified
@@ -156,12 +157,12 @@ func (address Address) calculateActualLineNumber(state *State) (int, error) {
 		if address.offset > 0 {
 			return -1, errInvalidLine
 		}
-		lineNbr = state.buffer.Len() + address.offset
+		lineNbr = state.Buffer.Len() + address.offset
 	}
-	if lineNbr > state.buffer.Len() {
+	if lineNbr > state.Buffer.Len() {
 		return -1, errInvalidLine
 	}
-	if lineNbr < 0 || lineNbr > state.buffer.Len() {
+	if lineNbr < 0 || lineNbr > state.Buffer.Len() {
 		return -1, errInvalidLine
 	} else {
 		return lineNbr, nil
@@ -181,7 +182,7 @@ type AddressRange struct {
  Otherwise, returns the current line number as start and end.
 */
 func (ra AddressRange) getAddressRange(state *State) (startLine int, endLine int, err error) {
-	if !ra.isAddressRangeSpecified() {
+	if !ra.IsAddressRangeSpecified() {
 		return state.lineNbr, state.lineNbr, nil
 	}
 	return ra.calculateStartAndEndLineNumbers(state)
@@ -203,9 +204,9 @@ func (ra AddressRange) calculateStartAndEndLineNumbers(state *State) (startLine 
 }
 
 /*
- This function returns TRUE if the given address range contains valid values.
+ IsAddressRangeSpecified returns TRUE if the given address range contains valid values.
 */
-func (ra AddressRange) isAddressRangeSpecified() bool {
+func (ra AddressRange) IsAddressRangeSpecified() bool {
 	return !(ra.start.addr == notSpecified && ra.end.addr == notSpecified)
 }
 

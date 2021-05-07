@@ -1,4 +1,4 @@
-package main
+package red
 
 import (
 	"container/list"
@@ -44,7 +44,7 @@ CmdGlobal processes the global command, which makes two passes over the file.
 */
 func (cmd Command) CmdGlobal(state *State) error {
 	currentLineNbr := state.lineNbr
-	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state)
+	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state)
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ CmdSubstitute replaces text in the addressed lines matching a regular expression
 */
 func (cmd Command) CmdSubstitute(state *State) error {
 
-	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state)
+	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state)
 	if err != nil {
 		return err
 	}
@@ -218,10 +218,10 @@ func replaceLines(writer io.Writer, startLineNbr, endLineNbr int,
 	el := state.dotline
 	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr++ {
 		line := el.Value.(Line)
-		if re.MatchString(line.line) {
+		if re.MatchString(line.Line) {
 			nbrLinesMatched++
 			// currently always "global" -- check out ReplaceAllFunc possibly?
-			changedLine := re.ReplaceAllString(line.line, replacement)
+			changedLine := re.ReplaceAllString(line.Line, replacement)
 			if printLine || printLineNumbers {
 				_printLine(writer, lineNbr, changedLine, printLineNumbers)
 			}

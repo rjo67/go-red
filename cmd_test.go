@@ -1,4 +1,4 @@
-package main
+package red
 
 import (
 	"bufio"
@@ -7,8 +7,8 @@ import (
 )
 
 func TestDelete(t *testing.T) {
-	state := newState()
-	state.buffer = createListOfLines([]string{"1", "2", "3", "4", "5"})
+	state := NewState()
+	state.Buffer = createListOfLines([]string{"1", "2", "3", "4", "5"})
 	cmd := Command{AddressRange{Address{addr: 2}, Address{addr: 3}}, commandDelete, ""}
 
 	// to capture the output
@@ -22,13 +22,13 @@ func TestDelete(t *testing.T) {
 	if state.lineNbr != 2 {
 		t.Fatalf("wrong state.lineNbr! got %d, expected 2", state.lineNbr)
 	}
-	_, err = WriteWriter(writer, state.buffer.Front(), 1, state.buffer.Len())
+	_, err = WriteWriter(writer, state.Buffer.Front(), 1, state.Buffer.Len())
 	if buff.String() != "1\n4\n5\n" {
 		t.Fatalf("2,3d returned '%s'", buff.String())
 	}
 
 	//  delete whole file
-	state.buffer = createListOfLines([]string{"1", "2", "3", "4", "5"})
+	state.Buffer = createListOfLines([]string{"1", "2", "3", "4", "5"})
 	cmd = Command{AddressRange{Address{addr: 1}, Address{addr: 5}}, commandDelete, ""}
 	buff.Reset()
 	err = cmd.CmdDelete(state, true)
@@ -38,7 +38,7 @@ func TestDelete(t *testing.T) {
 	if state.lineNbr != 0 {
 		t.Fatalf("wrong state.lineNbr! got %d, expected 0", state.lineNbr)
 	}
-	_, err = WriteWriter(writer, state.buffer.Front(), 1, state.buffer.Len())
+	_, err = WriteWriter(writer, state.Buffer.Front(), 1, state.Buffer.Len())
 	if buff.String() != "" {
 		t.Fatalf("1,5d returned '%s'", buff.String())
 	}
@@ -47,7 +47,7 @@ func TestDelete(t *testing.T) {
 
 func TestPrintRange(t *testing.T) {
 	state := State{}
-	state.buffer = createListOfLines([]string{"1", "2", "3", "4", "5"})
+	state.Buffer = createListOfLines([]string{"1", "2", "3", "4", "5"})
 	cmd := Command{AddressRange{Address{addr: 2}, Address{addr: 3}}, commandPrint, ""}
 
 	// to capture the output
@@ -80,21 +80,65 @@ func TestPrintRange(t *testing.T) {
 	if buff.String() != "3\n" {
 		t.Fatalf("3,3p returned '%s'", buff.String())
 	}
+
+/*
+	buff.Reset()
+	cmd, err = ParseCommand("+1")
+	if err != nil {
+		t.Fatalf("error %s", err)
+	}
+	err = _printRange(&buff, cmd, &state, false)
+	if err != nil {
+		t.Fatalf("error %s", err)
+	}
+	if buff.String() != "3\n" {
+		t.Fatalf("3,3p returned '%s'", buff.String())
+	}
+*/
 }
+
+/*
+func TestPrintWithFile(t *testing.T) {
+
+	//	t.Skip("currently skipping this test")
+
+	state := NewState()
+	cmd, err := ParseCommand("r test.txt")
+	err = cmd.CmdRead(state)
+	if err != nil {
+		t.Fatalf("error %s", err)
+	}
+
+	// to capture the output
+	var buff bytes.Buffer // implements io.Writer
+
+	cmd, err = ParseCommand("p 3,5")
+	if err != nil {
+		t.Fatalf("error %s", err)
+	}
+	err = _printRange(&buff, cmd, state, false)
+	if err != nil {
+		t.Fatalf("error %s", err)
+	}
+	if buff.String() != "1\n" {
+		t.Fatalf("empty command returned '%s'", buff.String())
+	}
+}
+*/
 
 func TestMoveToLine(t *testing.T) {
 	state := State{}
 	data := []string{"first", "second", "3", "", "5"}
 
-	state.buffer = createListOfLines(data)
+	state.Buffer = createListOfLines(data)
 
 	for i, expected := range data {
 		moveToLine(i+1, &state)
 		if state.lineNbr != (i + 1) {
 			t.Fatalf("bad state.lineNbr, expected %d but got %d", i+1, state.lineNbr)
 		}
-		if state.dotline.Value.(Line).line != expected+"\n" {
-			t.Fatalf("bad data element %d, expected '%s' but got '%s'", i, expected, state.dotline.Value.(Line).line)
+		if state.dotline.Value.(Line).Line != expected+"\n" {
+			t.Fatalf("bad data element %d, expected '%s' but got '%s'", i, expected, state.dotline.Value.(Line).Line)
 		}
 	}
 

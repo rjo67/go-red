@@ -1,4 +1,4 @@
-package main
+package red
 
 import (
 	"bytes"
@@ -7,12 +7,12 @@ import (
 
 func TestSubstitute(t *testing.T) {
 	state := State{}
-	state.buffer = createListOfLines([]string{"rjo", "rjo", "my name is rjo", "bar"})
+	state.Buffer = createListOfLines([]string{"rjo", "rjo", "my name is rjo", "bar"})
 
 	// to capture the output
 	var buff bytes.Buffer // implements io.Writer
 
-	nbrLinesChanged, _, err := processLines(&buff, 2, state.buffer.Len(), &state, "rjo", "foobar", "gp")
+	nbrLinesChanged, _, err := processLines(&buff, 2, state.Buffer.Len(), &state, "rjo", "foobar", "gp")
 	if err != nil {
 		t.Fatalf("error %s", err)
 	}

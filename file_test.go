@@ -1,4 +1,4 @@
-package main
+package red
 
 import (
 	"bufio"
@@ -92,10 +92,10 @@ func doReadTest(t *testing.T, data testdata, nbrBytes int, myList *list.List) {
 			e = e.Next()
 		}
 		line := e.Value.(Line)
-		if len(line.line) != want.lineLength {
-			t.Fatalf("Bad line length at line %d, expected %d but got %d", currentLine+1, want.lineLength, len(line.line))
+		if len(line.Line) != want.lineLength {
+			t.Fatalf("Bad line length at line %d, expected %d but got %d", currentLine+1, want.lineLength, len(line.Line))
 		}
-		expectedNbrBytes += len(line.line)
+		expectedNbrBytes += len(line.Line)
 	}
 	if expectedNbrBytes != nbrBytes {
 		t.Fatalf("Expected %d bytes but read %d", expectedNbrBytes, nbrBytes)
@@ -111,8 +111,8 @@ func createWriterAndDoTest(t *testing.T, listOfLines *list.List) {
 	var sb strings.Builder
 	for e := listOfLines.Front(); e != nil; e = e.Next() {
 		line := e.Value.(Line)
-		sb.WriteString(line.line)
-		expectedNbrBytes += len(line.line)
+		sb.WriteString(line.Line)
+		expectedNbrBytes += len(line.Line)
 	}
 	// sanity check -- should never fail
 	if expectedNbrBytes != len(sb.String()) {

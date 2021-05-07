@@ -1,4 +1,4 @@
-package main
+package red
 
 import (
 	"container/list"
@@ -11,8 +11,8 @@ State stores the global state.
 */
 type State struct {
 	// the last line number is accessible via buffer.Len()
-	buffer                *list.List     // the current buffer -- should never be null
-	cutBuffer             *list.List     // the cut buffer, set by commands c, d, j, s or y
+	Buffer                *list.List     // the current buffer -- should never be null
+	CutBuffer             *list.List     // the cut buffer, set by commands c, d, j, s or y
 	dotline               *list.Element  // the current (dot) line -- can be null
 	lineNbr               int            // the current line number
 	lastSubstRE           *regexp.Regexp // the previous substitution regexp
@@ -23,11 +23,11 @@ type State struct {
 	processingUndo        bool           // if currently processing an undo (therefore don't add undo commands)
 	changedSinceLastWrite bool           // whether the buffer has been changed since the last write
 	defaultFilename       string         // name of the default file
-	windowSize            int            // window size - for scroll command
-	debug                 bool           // cmdline flag: debugging activated?
-	showMemory            bool           // cmdline flag: show memory stats?
-	prompt                string         // cmdline flag: the prompt string
-	showPrompt            bool           // whether to show the prompt
+	WindowSize            int            // window size - for scroll command
+	Debug                 bool           // cmdline flag: debugging activated?
+	ShowMemory            bool           // cmdline flag: show memory stats?
+	Prompt                string         // cmdline flag: the prompt string
+	ShowPrompt            bool           // whether to show the prompt
 }
 
 /*
@@ -41,15 +41,15 @@ type Undo struct {
 }
 
 /*
-newState initialises a state structure.
+NewState initialises a state structure.
 */
-func newState() *State {
+func NewState() *State {
 
 	state := State{}
-	state.buffer = list.New()
-	state.cutBuffer = list.New()
+	state.Buffer = list.New()
+	state.CutBuffer = list.New()
 	state.undo = list.New()
-	state.prompt = ":" // default prompt
+	state.Prompt = ":" // default prompt
 
 	return &state
 }
@@ -61,7 +61,7 @@ func newState() *State {
 func (state *State) addUndo(start, end int, command string, text *list.List, origCmd Command) {
 	if !state.processingUndo {
 		undoCommand := Undo{Command{AddressRange{Address{start, 0}, Address{end, 0}}, command, ""}, text, origCmd}
-		if state.debug {
+		if state.Debug {
 			fmt.Println("added undo:", undoCommand)
 		}
 		state.undo.PushFront(undoCommand)

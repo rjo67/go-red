@@ -1,4 +1,4 @@
-package main
+package red
 
 import (
 	"bufio"
@@ -99,7 +99,7 @@ func WriteWriter(w *bufio.Writer, startElement *list.Element, startLineNbr, endL
 	el := startElement
 	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr++ {
 		line := el.Value.(Line)
-		nbrBytes, err := w.WriteString(line.line)
+		nbrBytes, err := w.WriteString(line.Line)
 		if err != nil {
 			return 0, err
 		}
