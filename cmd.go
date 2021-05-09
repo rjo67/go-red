@@ -58,11 +58,13 @@ const commandNoCommand string = ""
 const unsavedChanges string = "buffer has unsaved changes"
 
 var errInvalidWindowSize error = errors.New("invalid window size")
+var errBadMarkname error = errors.New("a name of a mark must be one char: a-z")
 var errMissingFilename error = errors.New("filename missing and no default set")
 var errNotAllowedInGlobalCommand error = errors.New("command cannot be used within 'g'/'v'")
 var errNothingToUndo error = errors.New("nothing to undo")
 var errUnrecognisedCommand error = errors.New("unrecognised command")
 
+var singleDigitRE = regexp.MustCompile(`^([a-z])$`)
 var justNumberRE = regexp.MustCompile(`^\s*(\d+)\s*$`)
 var commandLineRE = regexp.MustCompile("(.*?)([acdeEfgGhijklmnpPqQrstuvVwWxyz#=])(.*)")
 
@@ -435,6 +437,32 @@ func (cmd Command) CmdLinenumber(state *State) error {
 		return err
 	}
 	fmt.Println(startLineNbr)
+	return nil
+}
+
+/*
+CmdMark marks the given line.
+
+Name of the mark must be one char (a..z)
+ It is an error if an address range is specified.
+
+ The current address is unchanged.
+*/
+func (cmd Command) CmdMark(state *State) error {
+	matches := singleDigitRE.FindStringSubmatch(strings.TrimSpace(cmd.restOfCmd))
+	if matches == nil {
+		return errBadMarkname
+	}
+	markName := matches[1]
+	if cmd.AddrRange.IsAddressRangeSpecified() && cmd.AddrRange.start.addr != cmd.AddrRange.end.addr {
+		return ErrRangeShouldNotBeSpecified
+	}
+	startLineNbr, err := cmd.AddrRange.start.calculateActualLineNumber(state)
+	if err != nil {
+		return err
+	}
+	el := _findLine(startLineNbr, state.Buffer)
+	state.addMark(Mark{line: el, name: markName})
 	return nil
 }
 
@@ -967,12 +995,12 @@ func _printLine(writer io.Writer, lineNbr int, str string, printLineNumbers bool
 }
 
 /**
- * moves to the given line number and updates the state (dotline, lineNbr).
+ * finds element in the buffer corresponding to the given line number.
  */
-func moveToLine(requiredLine int, state *State) {
+func _findLine(requiredLine int, buffer *list.List) *list.Element {
 	// TODO? always starts at the top of the file ...
 	lineNbr := 1
-	e := state.Buffer.Front()
+	e := buffer.Front()
 	for ; e != nil; e = e.Next() {
 		if requiredLine == lineNbr {
 			break
@@ -984,8 +1012,16 @@ func moveToLine(requiredLine int, state *State) {
 	if requiredLine != lineNbr {
 		panic(fmt.Sprintf("bad line number: got %d, wanted %d", lineNbr, requiredLine))
 	}
+	return e
+}
+
+/**
+ * moves to the given line number and updates the state (dotline, lineNbr).
+ */
+func moveToLine(requiredLine int, state *State) {
+	e := _findLine(requiredLine, state.Buffer)
 	state.dotline = e
-	state.lineNbr = lineNbr
+	state.lineNbr = requiredLine
 }
 
 /*
@@ -1042,7 +1078,7 @@ func ProcessCommand(cmd Command, state *State, enteredText *list.List, inGlobalC
 	case commandJoin:
 		err = cmd.CmdJoin(state)
 	case commandMark:
-		fmt.Println("not yet implemented")
+		err = cmd.CmdMark(state)
 	case commandList:
 		fmt.Println("not yet implemented")
 	case commandMove:
