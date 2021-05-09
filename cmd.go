@@ -100,6 +100,10 @@ func ParseCommand(str string) (cmd Command, err error) {
 		}
 	}
 	matches = commandLineRE.FindStringSubmatch(str)
+	if matches == nil {
+		// add on implicit "p" and try again
+		matches = commandLineRE.FindStringSubmatch(str + "p")
+	}
 	if matches != nil {
 		addrString := strings.TrimSpace(matches[1])
 		cmdString := matches[2]
