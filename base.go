@@ -1,7 +1,6 @@
 package red
 
-import (
-)
+import ()
 
 /*
 A Line stores information about a line.
@@ -10,5 +9,3 @@ A Line stores information about a line.
 type Line struct {
 	Line string
 }
-
-

@@ -38,13 +38,13 @@ type Address struct {
 }
 
 // matches any number of +
-var /* const */ allPlusses = regexp.MustCompile("^\\s*[\\+ ]+$")
+var /* const */ allPlusses = regexp.MustCompile(`^\s*[+ ]+$`)
 
 // matches any number of -
-var /* const */ allMinusses = regexp.MustCompile("^\\s*[- ]+$")
+var /* const */ allMinusses = regexp.MustCompile(`^\s*[- ]+$`)
 
 // matches +n or -n
-var /* const */ plusMinusN = regexp.MustCompile("^\\s*([\\+-])\\s*(\\d+)\\s*$")
+var /* const */ plusMinusN = regexp.MustCompile(`^\s*([+-])\s*(\d+)\s*$`)
 
 /*
  Creates a new Address.
@@ -246,7 +246,7 @@ func newRange(rangeStr string) (addrRange AddressRange, err error) {
 
 	// check here if we've got a comma (or semicolon) - if not, just got one address
 	var start, end Address
-	if strings.IndexAny(rangeStr, ",;") == -1 {
+	if !strings.ContainsAny(rangeStr, ",;") {
 		start, err = newAddress(rangeStr)
 		if err != nil {
 			return addrRange, err

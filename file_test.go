@@ -3,6 +3,7 @@ package red
 import (
 	"bufio"
 	"bytes"
+
 	//   "fmt"
 	"container/list"
 	"os"
@@ -157,11 +158,10 @@ func createFileThatDoesNotEndWithALineBreak(fn string) (err error) {
 
 func createFileWithLongLine(fn string) (err error) {
 	file, err := os.Create(fn)
-	defer file.Close()
-
 	if err != nil {
 		return err
 	}
+	defer file.Close()
 
 	w := bufio.NewWriter(file)
 

@@ -16,9 +16,9 @@ const suffixList string = "l"   // list
 const suffixNumber string = "n" // number
 const suffixPrint string = "p"  // print
 
-var errSyntaxMissingDelimiter error = errors.New("Missing delimiter")
-var errNoSubstitutions error = errors.New("No substitution performed")
-var errNoPreviousRegex error = errors.New("No previous regex")
+var errSyntaxMissingDelimiter error = errors.New("missing delimiter")
+var errNoSubstitutions error = errors.New("no substitution performed")
+var errNoPreviousRegex error = errors.New("no previous regex")
 
 /*
 CmdGlobal processes the global command, which makes two passes over the file.
@@ -115,6 +115,9 @@ func (cmd Command) CmdSubstitute(state *State) error {
 			return err
 		}
 		nbrLinesChanged, undoList, err = processLines(os.Stdout, startLineNbr, endLineNbr, state, re, replacement, suffixes)
+		if err != nil {
+			return err
+		}
 	} else {
 		// TODO need to handle flags on a pure "s" command
 		suffixes := strings.TrimSpace(cmd.restOfCmd)
