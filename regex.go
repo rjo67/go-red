@@ -230,7 +230,7 @@ func replaceLines(writer io.Writer, startLineNbr, endLineNbr int,
 			}
 			el.Value = Line{changedLine}
 			// create undo command -- is handled as a 'change' on this line
-			currentLine := Address{lineNbr, 0}
+			currentLine := Address{addr: lineNbr, offset: 0}
 			undoCommand := Command{AddressRange{currentLine, currentLine}, commandChange, ""}
 			tmpList := list.New()
 			tmpList.PushFront(line)

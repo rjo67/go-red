@@ -534,8 +534,8 @@ CmdPrint prints the addressed lines. The current address is set to the address o
 func (cmd Command) CmdPrint(state *State) error {
 	// no address specified defaults to .
 	if !cmd.AddrRange.IsAddressRangeSpecified() {
-		startAddr := Address{state.lineNbr, 0}
-		endAddr := Address{state.lineNbr, 0}
+		startAddr := Address{addr: state.lineNbr, offset: 0}
+		endAddr := Address{addr: state.lineNbr, offset: 0}
 		cmd.AddrRange = AddressRange{startAddr, endAddr}
 	}
 	return _printRange(os.Stdout, cmd, state, cmd.Cmd == commandNumber)
@@ -646,8 +646,8 @@ func (cmd Command) CmdScroll(state *State) error {
 	if endLineNbr > state.Buffer.Len() {
 		endLineNbr = state.Buffer.Len()
 	}
-	startAddr := Address{startLineNbr, 0}
-	endAddr := Address{endLineNbr, 0}
+	startAddr := Address{addr: startLineNbr, offset: 0}
+	endAddr := Address{addr: endLineNbr, offset: 0}
 	cmd.AddrRange = AddressRange{startAddr, endAddr}
 	return _printRange(os.Stdout, cmd, state, true)
 }

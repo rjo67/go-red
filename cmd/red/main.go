@@ -4,11 +4,10 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"github.com/rjo67/red"
 	"os"
 	"runtime"
 	"time"
-	"github.com/rjo67/red"
-
 )
 
 /*

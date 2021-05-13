@@ -13,12 +13,13 @@ const charDot string = "."
 const charDollar string = "$"
 
 // special values for an address
-const currentLine int = -1
-const endOfFile int = -2
-const startOfFile int = -3
-
-// if an address is not specified ...
-const notSpecified int = -4
+const (
+	_            = iota // unused
+	currentLine  = -iota
+	endOfFile    = -iota
+	startOfFile  = -iota
+	notSpecified = -iota // if an address is not specified ...
+)
 
 var _ = fmt.Printf // For debugging; delete when done.
 
@@ -30,113 +31,169 @@ var errBadRange error = errors.New("address range start > end")
 var ErrRangeShouldNotBeSpecified error = errors.New("a range may not be specified")
 
 /*
-An Address stores a line number with optional offset
+Regex for an address.
+First part:
+ 1a: any number of + or - (mixed). The last + or - binds to the number, if present. See "second part".
+e.g. ++--5  == ++- -5
+     ++++   == +++ +   (no number in this case)
+
+ 1b: the chars . or $
+ 1c: char ' followed by a lowercase letter  ( == a mark)
+ 1d: /regex/ or ?regex?
+
+Second part: optional sign followed by a number
+
 */
-type Address struct {
-	addr   int
-	offset int // only set for +n, -n etc
+const addressREStr string = `^([\.\$ +-]*?||'[a-z]|/.*/|\?.*\?)([+-]?)(\d*) *$`
+
+var addressRE = regexp.MustCompile(addressREStr)
+var addressRangeRE = regexp.MustCompile("^" + addressREStr + "[,;]" + addressREStr + ".*$")
+
+// indicators for certain types of address
+const (
+	_             = iota
+	mark          = iota
+	regexForward  = iota
+	regexBackward = iota
+)
+
+/*
+SpecialAddress stores extra information for certain types of addresses (marks, regex).
+*/
+type specialAddress struct {
+	addrType int
+	info     string
 }
 
-// matches any number of +
-var /* const */ allPlusses = regexp.MustCompile(`^\s*[+ ]+$`)
+/*
+Address stores a line number with optional offset
+*/
+type Address struct {
+	addr    int
+	offset  int            // only set for +n, -n etc
+	special specialAddress // only set for certain types of addresses
+}
 
-// matches any number of -
-var /* const */ allMinusses = regexp.MustCompile(`^\s*[- ]+$`)
-
-// matches +n or -n
-var /* const */ plusMinusN = regexp.MustCompile(`^\s*([+-])\s*(\d+)\s*$`)
+func (a Address) String() string {
+	var str string
+	if a.special.addrType != 0 {
+		var specialStr string
+		switch a.special.addrType {
+		case mark:
+			specialStr = "'"
+		case regexBackward:
+			specialStr = "?"
+		case regexForward:
+			specialStr = "/"
+		}
+		str = fmt.Sprintf("%s%s", specialStr, a.special.info)
+	} else {
+		switch a.addr {
+		case currentLine:
+			str = "."
+		case endOfFile:
+			str = "$"
+		case startOfFile:
+			str = "<startoffile>"
+		default:
+			str = fmt.Sprintf("%d", a.addr)
+		}
+		if a.offset != 0 {
+			str = fmt.Sprintf("%s,%d", str, a.offset)
+		}
+	}
+	return fmt.Sprintf("(%s)", str)
+}
 
 /*
  Creates a new Address.
 
- Special chars:
+TODO  ??
    An empty string  - notSpecified (let caller decide)
-   .                - currentLine
-   $                - last line
-   +n
-    -n
-    +
-    -
-
- TODO:
-    marks
-    regexps
 */
 func newAddress(addrStr string) (Address, error) {
-	// handle special cases first
-	switch addrStr {
-	case "":
-		return Address{addr: notSpecified}, nil
-	case charDot:
-		return Address{addr: currentLine}, nil
-	case charDollar:
-		return Address{addr: endOfFile}, nil
-	default:
-		matched, trimmedStr := checkRegexAndTrim(allPlusses, addrStr)
-		if matched {
-			return Address{addr: currentLine, offset: len(trimmedStr)}, nil
+	matches := addressRE.FindStringSubmatch(addrStr)
+	if matches == nil {
+		return Address{}, errUnrecognisedAddress
+	}
+	// debugging***************
+	/*
+		for i, match := range matches[1:] {
+			if strings.TrimSpace(match) != "" {
+				fmt.Printf("match %d: %v\n", i+1, match)
+			}
 		}
-		matched, trimmedStr = checkRegexAndTrim(allMinusses, addrStr)
-		if matched {
-			return Address{addr: currentLine, offset: len(trimmedStr) * -1}, nil
+	*/
+	// debugging end***********
+
+	// 'special' chars are in matches[1]
+	if len(matches[1]) != 0 {
+		switch matches[1][0] {
+		case '\'':
+			// marks
+			return Address{special: specialAddress{addrType: mark, info: matches[1][1:]}}, nil
+		case '/':
+			// regex forward
+			return Address{special: specialAddress{addrType: regexForward, info: matches[1][1 : len(matches[1])-1]}}, nil
+		case '?':
+			// regex backward
+			return Address{special: specialAddress{addrType: regexBackward, info: matches[1][1 : len(matches[1])-1]}}, nil
 		}
-		// try to match +n, -n
-		address, err := handlePlusMinusNumber(addrStr)
-		//fmt.Printf("1 address %v, err %s\n", address, err)
+	}
+
+	// handle chars . $ and any number of +/-
+	cnt, foundCurrentLine, foundEndOfFile := 0, false, false
+	for _, ch := range strings.TrimSpace(matches[1]) {
+		switch ch {
+		case '+':
+			cnt++
+		case '-':
+			cnt--
+		case '.':
+			foundCurrentLine = true
+		case '$':
+			foundEndOfFile = true
+		}
+	}
+
+	signStr := strings.TrimSpace(matches[2])
+	numStr := strings.TrimSpace(matches[3])
+	foundSign := len(signStr) != 0
+	foundNumber := len(numStr) != 0
+	addrOffset := 0
+	// avoid processing if both were empty
+	if foundSign || foundNumber {
+		// handle case of only +/- without a number by adding '1', to enable the Atoi
+		if !foundNumber {
+			numStr = "1"
+		}
+		if foundSign {
+			numStr = signStr + numStr
+		}
+		num, err := strconv.Atoi(numStr)
 		if err != nil {
-			// last try: just a number
-			addrInt, err := strconv.Atoi(addrStr)
-			if err != nil {
-				return Address{}, errUnrecognisedAddress
-			} else {
-				return Address{addr: addrInt}, nil
-			}
-		}
-		return address, nil
-	}
-}
-
-/*
- * if the input matches the regex, TRUE is returned togethe with a copy of input, with all spaces removed.
- */
-func checkRegexAndTrim(regex *regexp.Regexp, input string) (bool, string) {
-	if regex.MatchString(input) {
-		trimmedStr := strings.Replace(input, " ", "", -1)
-		return true, trimmedStr
-	}
-	return false, ""
-}
-
-// creates an address from an input +n, -n
-// returns an error if wasn't parseable
-func handlePlusMinusNumber(addrStr string) (Address, error) {
-	matches := plusMinusN.FindAllStringSubmatch(addrStr, -1)
-	// we expect two matches
-	if len(matches) == 1 && len(matches[0]) == 3 {
-		signStr := matches[0][1] // + or -
-		var sign int
-		switch signStr {
-		case "-":
-			sign = -1
-		case "+":
-			sign = 1
-		default:
 			return Address{}, errUnrecognisedAddress
 		}
-		nbrStr := matches[0][2]
-		var nbr int
-		var err error
-		if nbrStr == "" { // if empty, throw error
-			return Address{}, errUnrecognisedAddress
-		} else {
-			nbr, err = strconv.Atoi(nbrStr)
-			if err != nil {
-				return Address{}, err
-			}
-		}
-		return Address{addr: currentLine, offset: nbr * sign}, nil
+		addrOffset = num
 	}
-	return Address{}, errUnrecognisedAddress
+
+	if foundCurrentLine {
+		return Address{addr: currentLine, offset: cnt + addrOffset}, nil
+	} else if foundEndOfFile {
+		return Address{addr: endOfFile, offset: cnt + addrOffset}, nil
+	} else {
+		// an absolute address is present if only a number was specified (e.g. '3').
+		// Note: the presence of a sign implies a relative address. -ve numbers are always relative.
+		// '2'   absolute
+		// '-2'  relative
+		// '+2'  relative
+		// '++2' relative
+		// '++'  relative
+		if cnt == 0 && !foundSign && foundNumber {
+			return Address{addr: cnt + addrOffset, offset: 0}, nil
+		}
+		return Address{addr: currentLine, offset: cnt + addrOffset}, nil
+	}
 }
 
 /*
@@ -174,6 +231,10 @@ An AddressRange stores the start and end addresses of a range.
 */
 type AddressRange struct {
 	start, end Address
+}
+
+func (r AddressRange) String() string {
+	return fmt.Sprintf("%s,%s", r.start, r.end)
 }
 
 /*
