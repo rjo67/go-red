@@ -231,7 +231,7 @@ func replaceLines(writer io.Writer, startLineNbr, endLineNbr int,
 			el.Value = Line{changedLine}
 			// create undo command -- is handled as a 'change' on this line
 			currentLine := Address{addr: lineNbr, offset: 0}
-			undoCommand := Command{AddressRange{currentLine, currentLine}, commandChange, ""}
+			undoCommand := Command{AddressRange{currentLine, currentLine, separatorComma}, commandChange, ""}
 			tmpList := list.New()
 			tmpList.PushFront(line)
 			undoList.PushBack(Undo{undoCommand, tmpList, Command{} /* TODO */})
@@ -240,4 +240,21 @@ func replaceLines(writer io.Writer, startLineNbr, endLineNbr int,
 		el = el.Next()
 	}
 	return nbrLinesMatched, undoList, nil
+}
+
+/*
+findNamedMatches matches the given string with the given regex,
+and returns a map of the named capture groups, or nil if no match.
+*/
+func findNamedMatches(regex *regexp.Regexp, str string) map[string]string {
+	match := regex.FindStringSubmatch(str)
+	if match != nil {
+		results := map[string]string{}
+		for i, name := range match {
+			results[regex.SubexpNames()[i]] = name
+		}
+		return results
+	} else {
+		return nil
+	}
 }

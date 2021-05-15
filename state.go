@@ -69,7 +69,7 @@ func NewState() *State {
 */
 func (state *State) addUndo(start, end int, command string, text *list.List, origCmd Command) {
 	if !state.processingUndo {
-		undoCommand := Undo{Command{AddressRange{Address{addr: start, offset: 0}, Address{addr: end, offset: 0}}, command, ""}, text, origCmd}
+		undoCommand := Undo{Command{AddressRange{Address{addr: start, offset: 0}, Address{addr: end, offset: 0}, separatorComma}, command, ""}, text, origCmd}
 		if state.Debug {
 			fmt.Println("added undo:", undoCommand)
 		}

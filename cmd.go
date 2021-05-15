@@ -64,7 +64,7 @@ var errNotAllowedInGlobalCommand error = errors.New("command cannot be used with
 var errNothingToUndo error = errors.New("nothing to undo")
 var errUnrecognisedCommand error = errors.New("unrecognised command")
 
-var singleDigitRE = regexp.MustCompile(`^([a-z])$`)
+var singleLetterRE = regexp.MustCompile(`^([a-z])$`)
 var justNumberRE = regexp.MustCompile(`^\s*(\d+)\s*$`)
 var commandLineRE = regexp.MustCompile("(.*?)([acdeEfgGhijklmnpPqQrstuvVwWxyz#=])(.*)")
 
@@ -449,7 +449,7 @@ Name of the mark must be one char (a..z)
  The current address is unchanged.
 */
 func (cmd Command) CmdMark(state *State) error {
-	matches := singleDigitRE.FindStringSubmatch(strings.TrimSpace(cmd.restOfCmd))
+	matches := singleLetterRE.FindStringSubmatch(strings.TrimSpace(cmd.restOfCmd))
 	if matches == nil {
 		return errBadMarkname
 	}
@@ -536,7 +536,7 @@ func (cmd Command) CmdPrint(state *State) error {
 	if !cmd.AddrRange.IsAddressRangeSpecified() {
 		startAddr := Address{addr: state.lineNbr, offset: 0}
 		endAddr := Address{addr: state.lineNbr, offset: 0}
-		cmd.AddrRange = AddressRange{startAddr, endAddr}
+		cmd.AddrRange = AddressRange{startAddr, endAddr, separatorComma}
 	}
 	return _printRange(os.Stdout, cmd, state, cmd.Cmd == commandNumber)
 }
@@ -648,7 +648,7 @@ func (cmd Command) CmdScroll(state *State) error {
 	}
 	startAddr := Address{addr: startLineNbr, offset: 0}
 	endAddr := Address{addr: endLineNbr, offset: 0}
-	cmd.AddrRange = AddressRange{startAddr, endAddr}
+	cmd.AddrRange = AddressRange{startAddr, endAddr, separatorComma}
 	return _printRange(os.Stdout, cmd, state, true)
 }
 
