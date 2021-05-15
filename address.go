@@ -40,7 +40,7 @@ e.g. ++--5  == ++- -5
 Second part: optional sign followed by a number
 
 */
-const addressREStr string = `([\.\$ +-]*?|'[a-z]|\/.*\/|\?.*\?)([+-]?)(\d*) *?`
+const addressREStr string = `(?P<special>[\.\$ +-]*?|'[a-z]|\/.*\/|\?.*\?)` + `(?P<sign>[+-]?)` + `(?P<offset>\d*) *?`
 
 var addressRE = regexp.MustCompile("^" + addressREStr + "$")
 
@@ -102,15 +102,13 @@ func (a Address) String() string {
 
 /*
  Creates a new Address.
-
-TODO  ??
-   An empty string  - notSpecified (let caller decide)
 */
 func newAddress(addrStr string) (Address, error) {
-	if len(strings.TrimSpace(addrStr)) ==0  {
+	addrStr = strings.TrimSpace(addrStr)
+	if len(addrStr) == 0 {
 		return Address{addr: notSpecified}, nil
 	}
-	matches := addressRE.FindStringSubmatch(addrStr)
+	matches := findNamedMatches(addressRE, addrStr)
 	if matches == nil {
 		return Address{}, errUnrecognisedAddress
 	}
@@ -124,24 +122,25 @@ func newAddress(addrStr string) (Address, error) {
 	*/
 	// debugging end***********
 
-	// 'special' chars are in matches[1]
-	if len(matches[1]) != 0 {
-		switch matches[1][0] {
+	// 'special' chars
+	specialChars := matches["special"]
+	if len(specialChars) != 0 {
+		switch specialChars[0] {
 		case '\'':
 			// marks
-			return Address{special: specialAddress{addrType: mark, info: matches[1][1:]}}, nil
+			return Address{special: specialAddress{addrType: mark, info: specialChars[1:]}}, nil
 		case '/':
 			// regex forward
-			return Address{special: specialAddress{addrType: regexForward, info: matches[1][1 : len(matches[1])-1]}}, nil
+			return Address{special: specialAddress{addrType: regexForward, info: specialChars[1 : len(specialChars)-1]}}, nil
 		case '?':
 			// regex backward
-			return Address{special: specialAddress{addrType: regexBackward, info: matches[1][1 : len(matches[1])-1]}}, nil
+			return Address{special: specialAddress{addrType: regexBackward, info: specialChars[1 : len(specialChars)-1]}}, nil
 		}
 	}
 
 	// handle chars . $ and any number of +/-
 	cnt, foundCurrentLine, foundEndOfFile := 0, false, false
-	for _, ch := range strings.TrimSpace(matches[1]) {
+	for _, ch := range specialChars {
 		switch ch {
 		case '+':
 			cnt++
@@ -154,8 +153,8 @@ func newAddress(addrStr string) (Address, error) {
 		}
 	}
 
-	signStr := strings.TrimSpace(matches[2])
-	numStr := strings.TrimSpace(matches[3])
+	signStr := strings.TrimSpace(matches["sign"])
+	numStr := strings.TrimSpace(matches["offset"])
 	foundSign := len(signStr) != 0
 	foundNumber := len(numStr) != 0
 	addrOffset := 0
