@@ -40,10 +40,9 @@ e.g. ++--5  == ++- -5
 Second part: optional sign followed by a number
 
 */
-const addressREStr string = `^([\.\$ +-]*?||'[a-z]|/.*/|\?.*\?)([+-]?)(\d*) *$`
+const addressREStr string = `([\.\$ +-]*?|'[a-z]|\/.*\/|\?.*\?)([+-]?)(\d*) *?`
 
-var addressRE = regexp.MustCompile(addressREStr)
-var addressRangeRE = regexp.MustCompile("^" + addressREStr + "[,;]" + addressREStr + ".*$")
+var addressRE = regexp.MustCompile("^" + addressREStr + "$")
 
 // indicators for certain types of address
 const (
@@ -108,6 +107,9 @@ TODO  ??
    An empty string  - notSpecified (let caller decide)
 */
 func newAddress(addrStr string) (Address, error) {
+	if len(strings.TrimSpace(addrStr)) ==0  {
+		return Address{addr: notSpecified}, nil
+	}
 	matches := addressRE.FindStringSubmatch(addrStr)
 	if matches == nil {
 		return Address{}, errUnrecognisedAddress
