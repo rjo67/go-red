@@ -77,6 +77,7 @@ func TestParseAddress(t *testing.T) {
 		{".++4", currentLine, 5},
 		{"$1", endOfFile, 1}, // syntactically legal, although an invalid range
 		{".1", currentLine, 1},
+		{"2++", 2, 2},
 	}
 
 	for _, test := range data {

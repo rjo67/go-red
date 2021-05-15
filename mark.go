@@ -2,7 +2,6 @@ package red
 
 import (
 	"container/list"
-	"fmt"
 )
 
 /*
@@ -19,5 +18,4 @@ A pre-existing mark with the same name will be replaced.
 */
 func (state *State) addMark(mark Mark) {
 	state.marks[mark.name] = mark
-	fmt.Printf("added mark '%s'\n", mark.name)
 }

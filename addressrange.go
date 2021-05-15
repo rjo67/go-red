@@ -26,7 +26,6 @@ var errUnrecognisedRange error = errors.New("unrecognised address range")
 var errBadRange error = errors.New("address range start > end")
 var ErrRangeShouldNotBeSpecified error = errors.New("a range may not be specified")
 
-//var addressRangeRE = regexp.MustCompile(`^(?P<address1>` + addressREStr + `)(?P<separator>[,;]?)(?P<address2>` + addressREStr + `).*$`)
 var addressRangeRE = regexp.MustCompile(`^(?P<address1>[^,;]*)` + `(?P<separator>[,;]?)` + `(?P<address2>[^,;]*)$`)
 
 /*
@@ -108,18 +107,7 @@ func newRange(rangeStr string) (AddressRange, error) {
 		return AddressRange{Address{addr: endOfFile}, Address{addr: endOfFile}, charComma}, nil
 	} else if rangeStr == charComma {
 		return AddressRange{Address{addr: startOfFile}, Address{addr: endOfFile}, charComma}, nil
-	} /* else if justNumberRE.MatchString(rangeStr) {
-		// if we can convert to an int, then a simple address has been specified
-		// Reason for the RE check above: "+1n" is also convertible to an int, but this has a special meaning
-		addrInt, err := strconv.Atoi(rangeStr)
-		if err != nil {
-			// ignore error, carry on
-		} else {
-			return AddressRange{Address{addr: addrInt}, Address{addr: addrInt}}, nil
-		}
 	}
-
-	*/
 
 	var addrRange AddressRange
 

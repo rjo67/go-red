@@ -11,9 +11,10 @@ func TestRangeErrors(t *testing.T) {
 		addrRange string
 	}{
 		{"2,1"},
+		{"1,2--"},
 	}
 	for _, test := range data {
-		t.Run(fmt.Sprintf("_%s_", test.addrRange), func(t *testing.T) {
+		t.Run(fmt.Sprintf(">>%s<<", test.addrRange), func(t *testing.T) {
 			addr, err := newRange(test.addrRange)
 			if err != nil {
 				// ok
@@ -92,6 +93,47 @@ func TestCreateRange(t *testing.T) {
 				t.Errorf("bad start: %d, expected: %d", r.start.addr, test.expectedStart)
 			} else if r.end.addr != test.expectedEnd {
 				t.Errorf("bad end: %d, expected: %d", r.end.addr, test.expectedEnd)
+			}
+		})
+	}
+}
+
+func TestSpecialRange(t *testing.T) {
+	data := []struct {
+		addrRange         string
+		expectedStartType int
+		expectedStartInfo string
+		expectedEndType   int
+		expectedEndInfo   string
+	}{
+		{"'a,'b", mark, "a", mark, "b"},
+		{"'a,/123/", mark, "a", regexForward, "123"},
+		{"/123/,/456/", regexForward, "123", regexForward, "456"},
+		{"/123/,?456?", regexForward, "123", regexBackward, "456"},
+		{"'b,?abc?", mark, "b", regexBackward, "abc"},
+		{"?abc?,'d", regexBackward, "abc", mark, "d"},
+		// some examples with spaces
+		{"'a ,'b", mark, "a", mark, "b"},
+		{"'a, /123/", mark, "a", regexForward, "123"},
+		{"/123/ ,/456/    ", regexForward, "123", regexForward, "456"},
+		{"   /123/,?456?", regexForward, "123", regexBackward, "456"},
+		{"'b  ,  ?abc?", mark, "b", regexBackward, "abc"},
+		{"?abc?,  'd", regexBackward, "abc", mark, "d"},
+	}
+
+	for _, test := range data {
+		t.Run(fmt.Sprintf(">>%s<<", test.addrRange), func(t *testing.T) {
+			r, err := newRange(test.addrRange)
+			if err != nil {
+				t.Errorf("error: %s", err)
+			} else if r.start.special.addrType != test.expectedStartType {
+				t.Errorf("bad start type: %d, expected: %d", r.start.special.addrType, test.expectedStartType)
+			} else if r.start.special.info != test.expectedStartInfo {
+				t.Errorf("bad start info: %s, expected: %s", r.start.special.info, test.expectedStartInfo)
+			} else if r.end.special.addrType != test.expectedEndType {
+				t.Errorf("bad end type: %d, expected: %d", r.end.special.addrType, test.expectedEndType)
+			} else if r.end.special.info != test.expectedEndInfo {
+				t.Errorf("bad end info: %s, expected: %s", r.end.special.info, test.expectedEndInfo)
 			}
 		})
 	}

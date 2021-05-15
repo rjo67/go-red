@@ -28,7 +28,7 @@ func TestDelete(t *testing.T) {
 
 	//  delete whole file
 	state.Buffer = createListOfLines([]string{"1", "2", "3", "4", "5"})
-	cmd = Command{AddressRange{Address{addr: 1}, Address{addr: 5},separatorComma}, commandDelete, ""}
+	cmd = Command{AddressRange{Address{addr: 1}, Address{addr: 5}, separatorComma}, commandDelete, ""}
 	buff.Reset()
 	err = cmd.CmdDelete(state, true)
 	checkError(t, err)
