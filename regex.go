@@ -245,15 +245,44 @@ func replaceLines(writer io.Writer, startLineNbr, endLineNbr int,
 /*
 findNamedMatches matches the given string with the given regex,
 and returns a map of the named capture groups, or nil if no match.
+The complete matched string is optionally (parameter 'addAll') stored with key "ALL".
 */
-func findNamedMatches(regex *regexp.Regexp, str string) map[string]string {
-	match := regex.FindStringSubmatch(str)
+func findNamedMatches(re *regexp.Regexp, str string, addAll bool) map[string]string {
+	match := re.FindStringSubmatch(str)
 	if match != nil {
-		results := map[string]string{}
-		for i, name := range match {
-			results[regex.SubexpNames()[i]] = name
+		return extractNamedCaptureGroups(re, match, addAll)
+	}
+	return nil
+}
+
+func extractNamedCaptureGroups(re *regexp.Regexp, match []string, addAll bool) map[string]string {
+	results := map[string]string{}
+	for i, result := range match {
+		// i==0: the whole match, unnamed: inserted with key ALL
+		if i == 0 {
+			if addAll {
+				results["ALL"] = result
+			}
+		} else if len(result) != 0 {
+			results[re.SubexpNames()[i]] = result
 		}
-		return results
+	}
+	return results
+}
+
+/*
+findAllNamedMatches finds all the matches of the given string with the given regex,
+and returns a slice of maps of the named capture groups, or nil if no match.
+The complete matched string is stored with key "ALL" if 'addAll' is true.
+*/
+func findAllNamedMatches(re *regexp.Regexp, str string, addAll bool) []map[string]string {
+	matches := re.FindAllStringSubmatch(str, -1)
+	if matches != nil {
+		allResults := make([]map[string]string, len(matches))
+		for i, match := range matches {
+			allResults[i] = extractNamedCaptureGroups(re, match, addAll)
+		}
+		return allResults
 	} else {
 		return nil
 	}

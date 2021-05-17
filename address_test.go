@@ -5,79 +5,122 @@ import (
 	"testing"
 )
 
-func TestParseAddressSpecials(t *testing.T) {
+/**
+Tests to check the internal structure after parsing an address line
+*/
+func TestRawParseAddress(t *testing.T) {
 	data := []struct {
-		addressStr   string
-		expectedType int
-		expectedInfo string
+		addressStr string
+		expected   string
 	}{
+		{"", ""},
 		// marks
-		{"'a", mark, "a"},
-		{"/.*/", regexForward, ".*"},
-		{"?.*?", regexBackward, ".*"},
+		{"'a", "'a"},
+		{"/.*/", "/.*/"},
+		{"?.*?", "?.*?"},
+		{"+", "+"},
+		{"++", "+,+"},
+		{"+++++", "+,+,+,+,+"},
+		{"-", "-"},
+		{"---", "-,-,-"},
+		{"-----", "-,-,-,-,-"},
+		{"++---", "+,+,-,-,-"},
+		{"+++--", "+,+,+,-,-"},
+		{"+++--+++", "+,+,+,-,-,+,+,+"},
+		{"--++", "-,-,+,+"},
+		{"3", "3"},
+		{"++-+3", "+,+,-,+3"},
+		{"21", "21"},
+		{"+2", "+2"},
+		{"++2", "+,+2"},
+		{"+23", "+23"},
+		{"----------+23", "-,-,-,-,-,-,-,-,-,-,+23"},
+		{"-3", "-3"},
+		{"+-3", "+,-3"},
+		{"-31", "-31"},
+		// whitespace
+		{"+ +", "+,+"},
+		{"+ ++ ++", "+,+,+,+,+"},
+		{"- -", "-,-"},
+		{"- -- --", "-,-,-,-,-"},
+		{"+ +2", "+,+2"},
+		{"+ -2", "+,-2"},
+		{"+ - ++ 2", "+,-,+,+,2"},
+		// . $
+		{"$", "$"},
+		{"$-1", "$,-1"},
+		{"$--3", "$,-,-3"},
+		{".", "."},
+		{".+1", ".,+1"},
+		{".1", ".,1"},
+		{".++1", ".,+,+1"},
+		{".++4", ".,+,+4"},
+		{"$1", "$,1"}, // syntactically legal, although an invalid range
+		{".1", ".,1"},
+		{"2++", "2,+,+"},
 	}
 	for _, test := range data {
-		t.Run(fmt.Sprintf("_%s_", test.addressStr), func(t *testing.T) {
+		t.Run(fmt.Sprintf(">>%s<<", test.addressStr), func(t *testing.T) {
 			addr, err := newAddress(test.addressStr)
 			if err != nil {
 				t.Errorf("error: %s", err)
-			} else if addr.special.addrType != test.expectedType {
-				t.Errorf("bad type, got: %d, expected: %d", addr.special.addrType, test.expectedType)
-			} else if addr.special.info != test.expectedInfo {
-				t.Errorf("bad info, got: %s, expected: %s", addr.special.info, test.expectedInfo)
-			} else if addr.addr != 0 || addr.offset != 0 {
-				t.Errorf("addr/offset must be zero for 'special' addresses, got addr: %d, offset: %d", addr.addr, addr.offset)
+			}
+			addressParts := addr.addressPartsAsString()
+			if addressParts != test.expected {
+				t.Errorf("wrong result, got: %s, expected: %s", addressParts, test.expected)
 			}
 		})
 	}
 }
 
-func TestParseAddress(t *testing.T) {
+func TestCalculateActualLineNumber(t *testing.T) {
 	data := []struct {
-		addressStr                         string
-		expectedStart, expectedStartOffset int
+		startLine       int
+		addressStr      string
+		expectedLineNbr int
 	}{
-		{"", notSpecified, 0},
-		{"+", currentLine, 1},
-		{"++", currentLine, 2},
-		{"+++++", currentLine, 5},
-		{"-", currentLine, -1},
-		{"---", currentLine, -3},
-		{"-----", currentLine, -5},
-		{"++---", currentLine, -1},
-		{"+++--", currentLine, 1},
-		{"+++--+++", currentLine, 4},
-		{"--++", currentLine, 0},
-		{"3", 3, 0},
-		{"++-+3", currentLine, 4},
-		{"21", 21, 0},
-		{"+2", currentLine, 2},
-		{"++2", currentLine, 3},
-		{"+23", currentLine, 23},
-		{"----------+23", currentLine, 13},
-		{"-3", currentLine, -3},
-		{"+-3", currentLine, -2},
-		{"-31", currentLine, -31},
+		//{"", notSpecified, 0},
+		{1, "+", 2},
+		{2, "++", 4},
+		{1, "+++++", 6},
+		{2, "-", 1},
+		{7, "---", 4},
+		{8, "-----", 3},
+		{5, "++---", 4},
+		{8, "++---", 7}, // temporarily goes 'over' end of buffer
+		{3, "+++--", 4},
+		{1, "--+++--+", 1}, // temporarily goes 'below' start of buffer
+		{2, "+++--+++", 6},
+		{3, "--++", 3},
+		{2, "3", 3},
+		{3, "++-+3", 7},
+		//{"21", 21, 0},
+		{3, "+2", 5},
+		{4, "++2", 7},
+		//{"+23", currentLine, 23},
+		//{"----------+23", currentLine, 13},
+		{5, "-3", 2},
+		{4, "+-3", 2},
+		//{"-31", currentLine, -31},
 		// whitespace
-		{"+ +", currentLine, 2},
-		{"+ ++ ++", currentLine, 5},
-		{"- -", currentLine, -2},
-		{"- -- --", currentLine, -5},
-		{"+ +2", currentLine, 3},
-		{"+ -2", currentLine, -1},
-		{"+ - ++ 2", currentLine, 4},
+		{1, "+ +", 3},
+		{2, "+ ++ ++", 7},
+		{3, "- -", 1},
+		{6, "- -- --", 1},
+		{1, "+ +2", 4},
+		{2, "+ -2", 1},
+		{4, "+ - ++ 2", 8},
 		// . $
-		{"$", endOfFile, 0},
-		{"$-1", endOfFile, -1},
-		{"$--3", endOfFile, -4},
-		{".", currentLine, 0},
-		{".+1", currentLine, 1},
-		{".1", currentLine, 1},
-		{".++1", currentLine, 2},
-		{".++4", currentLine, 5},
-		{"$1", endOfFile, 1}, // syntactically legal, although an invalid range
-		{".1", currentLine, 1},
-		{"2++", 2, 2},
+		{2, "$", 8},
+		{3, "$-1", 7},
+		{1, "$--3", 4},
+		{3, ".", 3},
+		{4, ".+1", 5},
+		{4, ".1", 5},
+		{2, ".++1", 4},
+		{2, ".++4", 7},
+		//{"$1", endOfFile, 1}, // syntactically legal, although an invalid range
+		{1, "2++", 4},
 	}
 
 	for _, test := range data {
@@ -85,10 +128,15 @@ func TestParseAddress(t *testing.T) {
 			addr, err := newAddress(test.addressStr)
 			if err != nil {
 				t.Errorf("error: %s", err)
-			} else if addr.addr != test.expectedStart {
-				t.Errorf("bad start, got: %d, expected: %d", addr.addr, test.expectedStart)
-			} else if addr.offset != test.expectedStartOffset {
-				t.Errorf("bad start offset, got: %d, expected: %d", addr.offset, test.expectedStartOffset)
+			} else {
+				lineNbr, err := addr.calculateActualLineNumber2(test.startLine, createListOfLines([]string{"1", "2", "3", "4", "5", "6", "7", "8"}))
+				if err != nil {
+					t.Errorf("error: %s", err)
+				} else {
+					if lineNbr != test.expectedLineNbr {
+						t.Errorf("wrong line nbr, got: %d, expected: %d, for address %v, starting at line %d", lineNbr, test.expectedLineNbr, addr, test.startLine)
+					}
+				}
 			}
 		})
 	}
@@ -98,8 +146,9 @@ func TestAddressErrors(t *testing.T) {
 	data := []struct {
 		addressStr string
 	}{
-		{"'qwe"}, // mark can only be one letter
-		{"/we"},  // non-terminated regex
+		{"'qwe"},  // mark can only be one letter
+		{"/we"},   // non-terminated regex
+		{"?we  "}, // non-terminated regex wich spaces
 	}
 	for _, test := range data {
 		t.Run(fmt.Sprintf("_%s_", test.addressStr), func(t *testing.T) {

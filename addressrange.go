@@ -37,7 +37,7 @@ type AddressRange struct {
 }
 
 func (r AddressRange) String() string {
-	return fmt.Sprintf("%s%s%s", r.start, r.separator, r.end)
+	return fmt.Sprintf("%v%s%v", r.start, r.separator, r.end)
 }
 
 /*
@@ -100,18 +100,18 @@ func newRange(rangeStr string) (AddressRange, error) {
 
 	// a few special cases to start with
 	if rangeStr == "" {
-		return AddressRange{Address{addr: notSpecified}, Address{addr: notSpecified}, charComma}, nil
-	} else if rangeStr == charDot {
-		return AddressRange{Address{addr: currentLine}, Address{addr: currentLine}, charComma}, nil
-	} else if rangeStr == charDollar {
-		return AddressRange{Address{addr: endOfFile}, Address{addr: endOfFile}, charComma}, nil
-	} else if rangeStr == charComma {
-		return AddressRange{Address{addr: startOfFile}, Address{addr: endOfFile}, charComma}, nil
+		return AddressRange{Address{addr: notSpecified}, Address{addr: notSpecified}, identComma}, nil
+	} else if rangeStr == identDot {
+		return AddressRange{Address{addr: currentLine}, Address{addr: currentLine}, identComma}, nil
+	} else if rangeStr == identDollar {
+		return AddressRange{Address{addr: endOfFile}, Address{addr: endOfFile}, identComma}, nil
+	} else if rangeStr == identComma {
+		return AddressRange{Address{addr: startOfFile}, Address{addr: endOfFile}, identComma}, nil
 	}
 
 	var addrRange AddressRange
 
-	matches := findNamedMatches(addressRangeRE, rangeStr)
+	matches := findNamedMatches(addressRangeRE, rangeStr, false)
 	if matches == nil {
 		return addrRange, errUnrecognisedRange
 	}
