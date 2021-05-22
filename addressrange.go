@@ -49,7 +49,7 @@ func (r AddressRange) String() string {
  Otherwise, returns the current line number as start and end.
 */
 func (ra AddressRange) getAddressRange(currentLineNbr int, buffer *list.List) (startLine int, endLine int, err error) {
-	if !ra.IsAddressRangeSpecified() {
+	if !ra.IsSpecified() {
 		return currentLineNbr, currentLineNbr, nil
 	}
 	return ra.calculateStartAndEndLineNumbers(currentLineNbr, buffer)
@@ -60,11 +60,30 @@ func (ra AddressRange) getAddressRange(currentLineNbr int, buffer *list.List) (s
  It is an error if start > end.
 */
 func (ra AddressRange) calculateStartAndEndLineNumbers(currentLineNbr int, buffer *list.List) (startLine int, endLine int, err error) {
-	startLine, err = ra.start.calculateActualLineNumber2(currentLineNbr, buffer)
+	// special case 1: first address empty -> {1,addr} or {.;addr}
+	if ra.start.isNotSpecified() {
+		switch ra.separator {
+		case separatorComma:
+			//TODO does this overwrite ra.start correctly?
+			if ra.start, err = newAddress("1"); err != nil {
+				return -1, -1, err
+			}
+		case separatorSemicolon:
+			if ra.start, err = newAddress(identDot); err != nil {
+				return -1, -1, err
+			}
+		}
+	}
+	// special case 2) first address given, second empty -> {<given address>, <given address>}
+	if ra.end.isNotSpecified() {
+		ra.end = ra.start
+	}
+
+	startLine, err = ra.start.calculateActualLineNumber(currentLineNbr, buffer)
 	if err != nil {
 		return -1, -1, errInvalidStartOfRange
 	}
-	endLine, err = ra.end.calculateActualLineNumber2(currentLineNbr, buffer)
+	endLine, err = ra.end.calculateActualLineNumber(currentLineNbr, buffer)
 	if err != nil {
 		return -1, -1, errInvalidEndOfRange
 	}
@@ -77,10 +96,10 @@ func (ra AddressRange) calculateStartAndEndLineNumbers(currentLineNbr int, buffe
 }
 
 /*
- IsAddressRangeSpecified returns TRUE if the given address range contains valid values.
+ IsSpecified returns TRUE if the given address range contains valid values.
 */
-func (ra AddressRange) IsAddressRangeSpecified() bool {
-	return !(ra.start.addr == notSpecified && ra.end.addr == notSpecified)
+func (ra AddressRange) IsSpecified() bool {
+	return !(ra.start.isNotSpecified() && ra.end.isNotSpecified())
 }
 
 /*
@@ -162,28 +181,35 @@ func newRange(rangeStr string) (AddressRange, error) {
 	}
 	separator := matches[separatorCaptureGroup]
 
+	/* TODO
+
 	// special cases: first address empty -> {1,addr} or {.;addr}
 	// TODO check if 2nd addr is present
-	if start.addr == notSpecified {
+	if start.isNotSpecified() {
 		switch separator {
 		case separatorComma:
-			start = Address{addr: startOfFile}
+			if start, err = newAddress("1"); err != nil {
+				return addrRange, err
+			}
 		case separatorSemicolon:
-			start = Address{addr: currentLine}
+			if start, err = newAddress(identDot); err != nil {
+				return addrRange, err
+			}
 		}
 	}
 
 	// first address given, second empty -> {<given address>, <given address>}
-	if end.addr == notSpecified {
+	if end.isNotSpecified() {
 		end = start
 	}
+	*/
 
 	return AddressRange{start, end, separator}, nil
 }
 
 /*
 newValidRange is like newRange but panics if the address range cannot be parsed.
-Primarily for test use.
+Primarily but not solely for test use.
 */
 func newValidRange(rangeStr string) AddressRange {
 	ra, err := newRange(rangeStr)

@@ -13,7 +13,6 @@ func TestRawParseAddress(t *testing.T) {
 		addressStr string
 		expected   string
 	}{
-		{"", ""},
 		// marks
 		{"'a", "'a"},
 		// regex
@@ -73,6 +72,15 @@ func TestRawParseAddress(t *testing.T) {
 			}
 		})
 	}
+	// test empty input
+	addr, err := newAddress("")
+	if err != nil {
+		t.Errorf("error: %s", err)
+	}
+	if !addr.isNotSpecified() {
+		t.Errorf("expected not specified, got %s", addr)
+	}
+
 }
 
 /*
@@ -134,7 +142,7 @@ func TestCalculateActualLineNumber(t *testing.T) {
 			if err != nil {
 				t.Errorf("error: %s", err)
 			} else {
-				lineNbr, err := addr.calculateActualLineNumber2(test.startLine, createListOfLines([]string{"1", "2", "3", "4", "5", "6", "7", "8"}))
+				lineNbr, err := addr.calculateActualLineNumber(test.startLine, createListOfLines([]string{"1", "2", "3", "4", "5", "6", "7", "8"}))
 				if err != nil {
 					t.Errorf("error: %s", err)
 				} else {
@@ -172,7 +180,7 @@ func TestInvalidCalculateActualLineNumber(t *testing.T) {
 			if err != nil {
 				t.Errorf("error: %s", err)
 			} else {
-				lineNbr, err := addr.calculateActualLineNumber2(test.startLine, createListOfLines([]string{"1", "2", "3", "4", "5", "6", "7", "8"}))
+				lineNbr, err := addr.calculateActualLineNumber(test.startLine, createListOfLines([]string{"1", "2", "3", "4", "5", "6", "7", "8"}))
 				if err != nil {
 					// ok
 				} else {

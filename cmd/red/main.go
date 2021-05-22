@@ -69,7 +69,7 @@ func mainloop(state *red.State) {
 					red.CommandFilename, red.CommandHelp, red.CommandPrompt,
 					red.CommandQuit, red.CommandQuitUnconditionally,
 					red.CommandUndo:
-					if cmd.AddrRange.IsAddressRangeSpecified() {
+					if cmd.AddrRange.IsSpecified() {
 						err = red.ErrRangeShouldNotBeSpecified
 					}
 				default:

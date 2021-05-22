@@ -17,19 +17,19 @@ const (
 	identDollar        string = "$"
 	identInc           string = "+"
 	identMark          string = "'"
+	identNotSpecified  string = "XXX" // if an address is not specified ...
 	identRegexBackward string = "?"
 	identRegexForward  string = "/"
 	identSemicolon     string = ";"
 	identSignedNbr     string = "1" // this value is only a placeholder, is not parsed as such from the input, nor used in String()
 )
 
-// special values for an address
+// special values for an address (part)
 const (
-	_            = iota // unused
-	currentLine  = -iota
-	endOfFile    = -iota
-	startOfFile  = -iota
-	notSpecified = -iota // if an address is not specified ...
+	_           = iota // unused
+	currentLine = -iota
+	endOfFile   = -iota
+	startOfFile = -iota
 )
 
 /*
@@ -47,8 +47,6 @@ The AddressPart representation is independent of the current 'state'.
 Use calculateActuaLineNumber2(...) to convert the internal representation into an actual line number.
 */
 type Address struct {
-	addr     int
-	offset   int           // only set for +n, -n etc
 	internal []addressPart // stores the address as parsed
 }
 
@@ -75,12 +73,46 @@ var addressRE = regexp.MustCompile(`(?P<dot>\.)|(?P<dollar>\$)|(?P<mark>'[a-z])|
 	`(?P<reBack>\?[^\?]*\?)|(?P<signednbr>[+-]?\d+)|(?P<inc>\+)|(?P<dec>-)`)
 
 /*
+isNotSpecified returns true if this address was not specified.
+*/
+func (a Address) isNotSpecified() bool {
+	return a.internal[0].addrIdent == identNotSpecified
+}
+
+/*
+isSpecified returns true if this address was specified.
+*/
+func (a Address) isSpecified() bool {
+	return !a.isNotSpecified()
+}
+
+/*
+newUnspecifiedAddress creates a new Address object with a special AddressPart to indiacte 'not specified'.
+*/
+func newUnspecifiedAddress() Address {
+	parts := make([]addressPart, 1)
+	parts[0] = addressPart{addrIdent: identNotSpecified}
+	return Address{internal: parts}
+}
+
+/*
+newAbsoluteAddress creates a new Address which references a given absolute line number.
+*/
+func newAbsoluteAddress(lineNbr int) Address {
+	parts := make([]addressPart, 1)
+	parts[0] = addressPart{addrIdent: identSignedNbr, info: strconv.Itoa(lineNbr)}
+	return Address{internal: parts}
+}
+
+/*
+ Creates a new Address from an input string.
+/*
  Creates a new Address from an input string.
 */
 func newAddress(addrStr string) (Address, error) {
 	addrStr = strings.TrimSpace(addrStr)
 	if len(addrStr) == 0 {
-		return Address{addr: notSpecified}, nil
+		return newUnspecifiedAddress(), nil
 	}
 
 	// stores the parsed address parts
@@ -172,17 +204,14 @@ func (addr Address) addressPartsAsString() string {
 }
 
 /*
- Returns an actual line number, depending on the given address and the current line number if required
+ calculateActuaLineNumber returns an actual line number specified by the address, depending on the current linenbr and the list of lines.
+ Returns error errInvalidLine if the resulting line number is out-of-bounds (<0, > max).
 */
-func (address Address) calculateActualLineNumber(state *State) (int, error) {
-	return address.calculateActualLineNumber2(state.lineNbr, state.Buffer)
-}
-
-/*
- calculateActuaLineNumber2 returns an actual line number, depending on the current linenbr and the list of lines.
-*/
-func (addr Address) calculateActualLineNumber2(currentLineNbr int, buffer *list.List) (int, error) {
+func (addr Address) calculateActualLineNumber(currentLineNbr int, buffer *list.List) (int, error) {
 	var lineNbr int = currentLineNbr
+	if addr.isNotSpecified() {
+		return currentLineNbr, nil
+	}
 	parsingAddressOffset := false // if true, all numbers (e.g. 2, or +2) are treated as offsets
 	//fmt.Printf("addr: %v\n", address)
 	for _, addrPart := range addr.internal {
@@ -223,7 +252,7 @@ func (addr Address) calculateActualLineNumber2(currentLineNbr int, buffer *list.
 				return -1, fmt.Errorf("error parsing signednbr in address part '%v': %w", addrPart, err)
 			}
 			if parsingAddressOffset {
-				// always relative number in address offset
+				// always relative number when parsing address offset
 				lineNbr += parsedLineNbr
 			} else {
 				switch addrPart.info[0:1] {
@@ -369,39 +398,16 @@ func analyzeParseError(start, end int, str string) (string, string) {
 /*
 String generates a pretty form of an Address.
 */
-/*
-TODO
 func (a Address) String() string {
-	var str string
-	if a.special.addrType != 0 {
-		var specialStr string
-		switch a.special.addrType {
-		case mark:
-			specialStr = identMark
-		case regexBackward:
-			specialStr = identRegexBackward
-		case regexForward:
-			specialStr = identRegexForward
-		}
-		str = fmt.Sprintf("%s%s", specialStr, a.special.info)
-	} else {
-		switch a.addr {
-		case currentLine:
-			str = identDot
-		case endOfFile:
-			str = identDollar
-		case startOfFile:
-			str = "<startoffile>"
-		default:
-			str = fmt.Sprintf("%d", a.addr)
-		}
-		if a.offset != 0 {
-			str = fmt.Sprintf("%s,%d", str, a.offset)
-		}
+	if a.isNotSpecified() {
+		return fmt.Sprintf("(%s)", "not specified")
 	}
-	return fmt.Sprintf("(%s)", str)
+	var str string
+	for _, part := range a.internal {
+		str = fmt.Sprintf("%s%s,", str, part)
+	}
+	return fmt.Sprintf("(%s)", str[0:len(str)-1])
 }
-*/
 
 /*
 String generates a pretty form of an addressPart.

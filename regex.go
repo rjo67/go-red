@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -234,7 +235,10 @@ func replaceLines(writer io.Writer, startLineNbr, endLineNbr int,
 			}
 			el.Value = Line{changedLine}
 			// create undo command -- is handled as a 'change' on this line
-			currentLine := Address{addr: lineNbr, offset: 0}
+			currentLine, err := newAddress(strconv.Itoa(lineNbr))
+			if err != nil {
+				return 0, nil, err
+			}
 			undoCommand := Command{AddressRange{currentLine, currentLine, separatorComma}, commandChange, ""}
 			tmpList := list.New()
 			tmpList.PushFront(line)

@@ -140,7 +140,7 @@ inserts text in the buffer before the addressed line.
 */
 func (cmd Command) CmdAppendInsert(state *State, inputLines *list.List) error {
 	// calc required line (checks if this is a valid line)
-	lineNbr, err := cmd.AddrRange.start.calculateActualLineNumber(state)
+	lineNbr, err := cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
@@ -203,7 +203,7 @@ CmdChange changes lines in the buffer.
 */
 func (cmd Command) CmdChange(state *State, inputLines *list.List) error {
 
-	startLineNbr, err := cmd.AddrRange.start.calculateActualLineNumber(state)
+	startLineNbr, err := cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
@@ -400,7 +400,7 @@ func (cmd Command) CmdJoin(state *State) error {
 	var startLineNbr, endLineNbr int
 	var err error
 
-	if !cmd.AddrRange.IsAddressRangeSpecified() {
+	if !cmd.AddrRange.IsSpecified() {
 		return nil
 	} else {
 		if startLineNbr, endLineNbr, err = cmd.AddrRange.calculateStartAndEndLineNumbers(state.lineNbr, state.Buffer); err != nil {
@@ -432,7 +432,7 @@ CmdLinenumber prints the line number of the addressed line.
  The current address is unchanged.
 */
 func (cmd Command) CmdLinenumber(state *State) error {
-	startLineNbr, err := cmd.AddrRange.start.calculateActualLineNumber(state)
+	startLineNbr, err := cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
@@ -454,10 +454,10 @@ func (cmd Command) CmdMark(state *State) error {
 		return errBadMarkname
 	}
 	markName := matches[1]
-	if cmd.AddrRange.IsAddressRangeSpecified() && cmd.AddrRange.start.addr != cmd.AddrRange.end.addr {
+	if cmd.AddrRange.end.isSpecified() {
 		return ErrRangeShouldNotBeSpecified
 	}
-	startLineNbr, err := cmd.AddrRange.start.calculateActualLineNumber(state)
+	startLineNbr, err := cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
@@ -495,7 +495,7 @@ func (cmd Command) CmdMove(state *State) error {
 		if destLine, err = newAddress(destStr); err != nil {
 			return errInvalidDestinationAddress
 		}
-		if destLineNbr, err = destLine.calculateActualLineNumber(state); err != nil {
+		if destLineNbr, err = destLine.calculateActualLineNumber(state.lineNbr, state.Buffer); err != nil {
 			return err
 		}
 	}
@@ -525,7 +525,7 @@ func (cmd Command) CmdMove(state *State) error {
 }
 
 /*
-CmdPrint prints the addressed lines. The current address is set to the address of the last line printed.
+CmdPrint prints the addressed lines.
 
  For command "n": Precedes each line by its line number and a <tab>.
 
@@ -533,10 +533,8 @@ CmdPrint prints the addressed lines. The current address is set to the address o
 */
 func (cmd Command) CmdPrint(state *State) error {
 	// no address specified defaults to .
-	if !cmd.AddrRange.IsAddressRangeSpecified() {
-		startAddr := Address{addr: state.lineNbr, offset: 0}
-		endAddr := Address{addr: state.lineNbr, offset: 0}
-		cmd.AddrRange = AddressRange{startAddr, endAddr, separatorComma}
+	if !cmd.AddrRange.IsSpecified() {
+		cmd.AddrRange = newValidRange(identDot)
 	}
 	return _printRange(os.Stdout, cmd, state, cmd.Cmd == commandNumber)
 }
@@ -549,10 +547,10 @@ func (cmd Command) CmdPut(state *State) error {
 	var startLineNbr int
 	var err error
 	// default is append at current line
-	if !cmd.AddrRange.IsAddressRangeSpecified() {
+	if !cmd.AddrRange.IsSpecified() {
 		startLineNbr = state.lineNbr
 	} else {
-		if startLineNbr, err = cmd.AddrRange.start.calculateActualLineNumber(state); err != nil {
+		if startLineNbr, err = cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer); err != nil {
 			return err
 		}
 	}
@@ -583,10 +581,10 @@ func (cmd Command) CmdRead(state *State) error {
 	}
 	var startLineNbr int
 	// default is append at eof
-	if !cmd.AddrRange.IsAddressRangeSpecified() {
+	if !cmd.AddrRange.IsSpecified() {
 		startLineNbr = state.Buffer.Len()
 	} else {
-		startLineNbr, err = cmd.AddrRange.start.calculateActualLineNumber(state)
+		startLineNbr, err = cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
 		if err != nil {
 			return err
 		}
@@ -618,10 +616,10 @@ CmdScroll scrolls n lines at a time starting at addressed line, and sets window 
 func (cmd Command) CmdScroll(state *State) error {
 	var startLineNbr, endLineNbr int
 	var err error
-	if !cmd.AddrRange.IsAddressRangeSpecified() {
+	if !cmd.AddrRange.IsSpecified() {
 		startLineNbr = state.lineNbr + 1
 	} else {
-		startLineNbr, err = cmd.AddrRange.start.calculateActualLineNumber(state)
+		startLineNbr, err = cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
 		if err != nil {
 			return err
 		}
@@ -640,14 +638,16 @@ func (cmd Command) CmdScroll(state *State) error {
 	if startLineNbr == 0 {
 		startLineNbr = 1
 	}
-	if startLineNbr > state.Buffer.Len() {
-		startLineNbr = state.Buffer.Len()
+	startLineNbr = minIntOf(startLineNbr, state.Buffer.Len())
+	endLineNbr = minIntOf(endLineNbr, state.Buffer.Len())
+
+	var startAddr, endAddr Address
+	if startAddr, err = newAddress(strconv.Itoa(startLineNbr)); err != nil {
+		return err
 	}
-	if endLineNbr > state.Buffer.Len() {
-		endLineNbr = state.Buffer.Len()
+	if endAddr, err = newAddress(strconv.Itoa(endLineNbr)); err != nil {
+		return err
 	}
-	startAddr := Address{addr: startLineNbr, offset: 0}
-	endAddr := Address{addr: endLineNbr, offset: 0}
 	cmd.AddrRange = AddressRange{startAddr, endAddr, separatorComma}
 	return _printRange(os.Stdout, cmd, state, true)
 }
@@ -673,7 +673,7 @@ func (cmd Command) CmdTransfer(state *State) error {
 		if destLine, err = newAddress(destStr); err != nil {
 			return errInvalidDestinationAddress
 		}
-		if destLineNbr, err = destLine.calculateActualLineNumber(state); err != nil {
+		if destLineNbr, err = destLine.calculateActualLineNumber(state.lineNbr, state.Buffer); err != nil {
 			return err
 		}
 	}
@@ -746,7 +746,7 @@ func (cmd Command) CmdWrite(state *State) error {
 	}
 
 	var startLineNbr, endLineNbr int
-	if !cmd.AddrRange.IsAddressRangeSpecified() {
+	if !cmd.AddrRange.IsSpecified() {
 		startLineNbr = 1
 		endLineNbr = state.Buffer.Len()
 	} else {
@@ -805,10 +805,23 @@ func (cmd Command) CmdYank(state *State) error {
   - then re-insert
 */
 func handleUndoMove(undoCmd Undo, state *State) error {
-	// first the delete
-	_ = deleteLines(undoCmd.cmd.AddrRange.start.addr, undoCmd.cmd.AddrRange.end.addr, state)
-	// then append. The line to append at is stored in the original command
-	appendLines(undoCmd.originalCmd.AddrRange.start.addr-1, state, undoCmd.text)
+	// first the delete...
+	undoStartLine, err := undoCmd.cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
+	if err != nil {
+		return err
+	}
+	undoEndLine, err := undoCmd.cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
+	if err != nil {
+		return err
+	}
+	_ = deleteLines(undoStartLine, undoEndLine, state)
+
+	// ...then the append. The line to append at is stored in the original command
+	originalStartLine, err := undoCmd.originalCmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
+	if err != nil {
+		return err
+	}
+	appendLines(originalStartLine-1, state, undoCmd.text)
 
 	return nil
 }
@@ -1116,4 +1129,14 @@ func ProcessCommand(cmd Command, state *State, enteredText *list.List, inGlobalC
 		fmt.Println("ERROR got command not in switch!?: ", cmd.Cmd)
 	}
 	return quit, err
+}
+
+func minIntOf(vars ...int) int {
+	min := vars[0]
+	for _, i := range vars {
+		if min > i {
+			min = i
+		}
+	}
+	return min
 }

@@ -52,7 +52,7 @@ func TestCreateAddressRange(t *testing.T) {
 		{"7,8", 2, 7, 8},
 		{"7,", 5, 7, 7},
 		{"8", 3, 8, 8},
-		{",7", 2, 2, 7}, // If only the second address is given, the resulting address pair is '.,addr'
+		{",7", 2, 1, 7}, // If only the second address is given, the resulting address pair is '1,addr'
 		{";8", 2, 2, 8}, // If only the second address is given, the resulting address pair is '.;addr'
 		{",", 3, 1, 8},  // (1,$)
 		{";", 3, 3, 8},  // (.,$)
@@ -60,7 +60,6 @@ func TestCreateAddressRange(t *testing.T) {
 		{"$,$", 4, 8, 8},
 		{"$", 3, 8, 8},
 		{"5", 3, 5, 5},
-		{"", 3, 3, 3}, // default to current line
 		{".", 5, 5, 5},
 		// marks
 		//{"'a,'b", mark, "a", mark, "b"},
@@ -95,4 +94,13 @@ func TestCreateAddressRange(t *testing.T) {
 			}
 		})
 	}
+	// test empty input
+	r, err := newRange("")
+	if err != nil {
+		t.Errorf("error: %s", err)
+	}
+	if r.IsSpecified() {
+		t.Errorf("expected not specified, got %s", r)
+	}
+
 }
