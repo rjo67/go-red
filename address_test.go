@@ -16,8 +16,10 @@ func TestRawParseAddress(t *testing.T) {
 		{"", ""},
 		// marks
 		{"'a", "'a"},
+		// regex
 		{"/.*/", "/.*/"},
 		{"?.*?", "?.*?"},
+		// inc, dec
 		{"+", "+"},
 		{"++", "+,+"},
 		{"+++++", "+,+,+,+,+"},
@@ -73,13 +75,16 @@ func TestRawParseAddress(t *testing.T) {
 	}
 }
 
+/*
+Tests to check the calculation of the actual line number.
+*/
 func TestCalculateActualLineNumber(t *testing.T) {
 	data := []struct {
 		startLine       int
 		addressStr      string
 		expectedLineNbr int
 	}{
-		//{"", notSpecified, 0},
+		{4, "", 4}, // no-op command, stays at start line
 		{1, "+", 2},
 		{2, "++", 4},
 		{1, "+++++", 6},
@@ -94,14 +99,10 @@ func TestCalculateActualLineNumber(t *testing.T) {
 		{3, "--++", 3},
 		{2, "3", 3},
 		{3, "++-+3", 7},
-		//{"21", 21, 0},
 		{3, "+2", 5},
 		{4, "++2", 7},
-		//{"+23", currentLine, 23},
-		//{"----------+23", currentLine, 13},
 		{5, "-3", 2},
 		{4, "+-3", 2},
-		//{"-31", currentLine, -31},
 		// whitespace
 		{1, "+ +", 3},
 		{2, "+ ++ ++", 7},
@@ -119,8 +120,12 @@ func TestCalculateActualLineNumber(t *testing.T) {
 		{4, ".1", 5},
 		{2, ".++1", 4},
 		{2, ".++4", 7},
-		//{"$1", endOfFile, 1}, // syntactically legal, although an invalid range
 		{1, "2++", 4},
+		// mark
+		//	{1, "'a", 2}, not yet implemented
+		// regex
+		{1, "/3/", 3},
+		{5, "+?3?", 3},
 	}
 
 	for _, test := range data {
@@ -142,6 +147,83 @@ func TestCalculateActualLineNumber(t *testing.T) {
 	}
 }
 
+/**
+valid address but invalid actual line nbr
+*/
+func TestInvalidCalculateActualLineNumber(t *testing.T) {
+	data := []struct {
+		startLine  int
+		addressStr string
+	}{
+		// goes past end of file
+		{6, "21"},
+		{2, "+7"},
+		{1, "----------+18"},
+		// goes before start of file
+		{3, "-4"},
+		// syntactically legal, but an invalid actual line
+		{1, "$1"},
+		{3, "1--"},
+	}
+
+	for _, test := range data {
+		t.Run(fmt.Sprintf(">>%s<<", test.addressStr), func(t *testing.T) {
+			addr, err := newAddress(test.addressStr)
+			if err != nil {
+				t.Errorf("error: %s", err)
+			} else {
+				lineNbr, err := addr.calculateActualLineNumber2(test.startLine, createListOfLines([]string{"1", "2", "3", "4", "5", "6", "7", "8"}))
+				if err != nil {
+					// ok
+				} else {
+					t.Errorf("expected error, got line nbr: %d, for address %v, starting at line %d", lineNbr, addr, test.startLine)
+				}
+			}
+		})
+	}
+}
+
+func TestMatchLineForwardOrBackward(t *testing.T) {
+	data := []struct {
+		forward         bool
+		startLine       int
+		regex           string
+		expectedLineNbr int
+	}{
+		{true, 6, "7", 7},
+		{true, 3, "[78]", 7},
+		// wraparound
+		{true, 3, "2", 2},
+		{true, 3, "8", 8},
+		// backwards search
+		{false, 3, "1", 1},
+		{false, 4, "[12]", 2},
+		// wraparound
+		{false, 3, "8", 8},
+	}
+
+	for i, test := range data {
+		t.Run(fmt.Sprintf("%2d >>%s<<", i, test.regex), func(t *testing.T) {
+			var lineNbr int
+			var err error
+			buf := createListOfLines([]string{"1", "2", "3", "4", "5", "6", "7", "8"})
+			if test.forward {
+				lineNbr, err = matchLineForward(test.startLine, test.regex, buf)
+			} else {
+				lineNbr, err = matchLineBackward(test.startLine, test.regex, buf)
+			}
+			if err != nil {
+				t.Errorf("error: %s", err)
+			} else if lineNbr != test.expectedLineNbr {
+				t.Errorf("got line nbr: %d, expected %d", lineNbr, test.expectedLineNbr)
+			}
+		})
+	}
+}
+
+/**
+invalid address strings
+*/
 func TestAddressErrors(t *testing.T) {
 	data := []struct {
 		addressStr string

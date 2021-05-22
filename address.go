@@ -12,13 +12,14 @@ import (
 // identifiers, used e.g. in addressPart
 const (
 	identComma         string = ","
+	identDec           string = "-"
 	identDot           string = "."
 	identDollar        string = "$"
-	identMark          string = "'"
-	identRegexForward  string = "/"
-	identRegexBackward string = "?"
 	identInc           string = "+"
-	identDec           string = "-"
+	identMark          string = "'"
+	identRegexBackward string = "?"
+	identRegexForward  string = "/"
+	identSemicolon     string = ";"
 	identSignedNbr     string = "1" // this value is only a placeholder, is not parsed as such from the input, nor used in String()
 )
 
@@ -40,17 +41,22 @@ type addressPart struct {
 }
 
 /*
-Address stores a line number with optional offset
+Address stores a list of AddressParts, which taken together will result in an actual line number.
+
+The AddressPart representation is independent of the current 'state'.
+Use calculateActuaLineNumber2(...) to convert the internal representation into an actual line number.
 */
 type Address struct {
-	addr        int
-	offset      int           // only set for +n, -n etc
-	specialInfo string        // only set for certain types of addresses
-	internal    []addressPart // stores the address as parsed
+	addr     int
+	offset   int           // only set for +n, -n etc
+	internal []addressPart // stores the address as parsed
 }
 
-var errInvalidDestinationAddress error = errors.New("invalid line for destination")
-var errUnrecognisedAddress error = errors.New("unrecognised address")
+var (
+	errInvalidDestinationAddress error = errors.New("invalid line for destination")
+	errUnrecognisedAddress       error = errors.New("unrecognised address")
+	errInvalidLine               error = errors.New("invalid line")
+)
 
 /*
 Regex for the parts of an address.
@@ -59,7 +65,8 @@ Regex for the parts of an address.
  3: reFor:		/regex/
  4: reBack:		?regex?
  5. signednbr:	+-<n>
- 6. incdec:		+ -
+ 6. inc:		+
+ 7. dec:		-
 
 These can be repeated any number of times.
 Note: the check for a signed number must come before the check for +/-.
@@ -68,10 +75,7 @@ var addressRE = regexp.MustCompile(`(?P<dot>\.)|(?P<dollar>\$)|(?P<mark>'[a-z])|
 	`(?P<reBack>\?[^\?]*\?)|(?P<signednbr>[+-]?\d+)|(?P<inc>\+)|(?P<dec>-)`)
 
 /*
- Creates a new Address.
-
- A match is then parsed again using regexp.FindStringSubmatch to identify the capture group.
- (Using this method alone would not allow precise error messages, if at all, in the case of bad input)
+ Creates a new Address from an input string.
 */
 func newAddress(addrStr string) (Address, error) {
 	addrStr = strings.TrimSpace(addrStr)
@@ -91,7 +95,7 @@ func newAddress(addrStr string) (Address, error) {
 	for keepGoing {
 		loc := addressRE.FindStringIndex(addrStr[index:])
 		if loc == nil {
-			// this is ok if reachedhave  end of input; otherwise check the intervening chars
+			// this is ok if have reached end of input; otherwise check the intervening chars
 			if index != len(addrStr) {
 				err := checkSkippedChars(index, len(addrStr), addrStr)
 				if err != nil {
@@ -197,12 +201,21 @@ func (addr Address) calculateActualLineNumber2(currentLineNbr int, buffer *list.
 			parsingAddressOffset = true
 		case identMark:
 			// TODO
+			return -1, fmt.Errorf("mark in address not yet implemented")
 			parsingAddressOffset = true
 		case identRegexForward:
-			// TODO
+			matchingLineNbr, err := matchLineForward(lineNbr, addrPart.info, buffer)
+			if err != nil {
+				return -1, fmt.Errorf("did not find line matching regex")
+			}
+			lineNbr = matchingLineNbr
 			parsingAddressOffset = true
 		case identRegexBackward:
-			// TODO
+			matchingLineNbr, err := matchLineBackward(lineNbr, addrPart.info, buffer)
+			if err != nil {
+				return -1, fmt.Errorf("did not find line matching regex")
+			}
+			lineNbr = matchingLineNbr
 			parsingAddressOffset = true
 		case identSignedNbr:
 			parsedLineNbr, err := strconv.Atoi(addrPart.info)
@@ -232,6 +245,84 @@ func (addr Address) calculateActualLineNumber2(currentLineNbr int, buffer *list.
 		return -1, errInvalidLine
 	}
 	return lineNbr, nil
+}
+
+/*
+Returns the line number of the next line after 'startLine' which matches the given regex.
+Search will wrap around.
+*/
+func matchLineForward(startLine int, reStr string, buffer *list.List) (int, error) {
+	re := regexp.MustCompile(reStr)
+
+	// move to line 'startLine'
+	e := _findLine(startLine, buffer)
+	// should not happen
+	if e == nil {
+		return -1, fmt.Errorf("matchLineForward: move to line '%d' failed", startLine)
+	}
+
+	found := false
+	currentLineNbr := startLine
+
+	// starting at the next line, iterate to end of file matching regex
+	for e = e.Next(); e != nil && !found; e = e.Next() {
+		currentLineNbr++
+		if re.MatchString(e.Value.(Line).Line) {
+			found = true
+		}
+	}
+
+	if found {
+		return currentLineNbr, nil
+	}
+
+	// now iterate from start of file to 'startLine' matching regex
+	for currentLineNbr, e = 0, buffer.Front(); (currentLineNbr != startLine) && !found; e = e.Next() {
+		currentLineNbr++
+		if re.MatchString(e.Value.(Line).Line) {
+			found = true
+		}
+	}
+
+	if found {
+		return currentLineNbr, nil
+	} else {
+		return -1, fmt.Errorf("mo matching line found")
+	}
+}
+
+/*
+Returns the line number of the first line before 'startLine' which matches the given regex.
+Search will wrap around.
+*/
+func matchLineBackward(startLine int, reStr string, buffer *list.List) (int, error) {
+	re := regexp.MustCompile(reStr)
+
+	// move to line 'startLine'
+	e := _findLine(startLine, buffer)
+	// should not happen
+	if e == nil {
+		return -1, fmt.Errorf("matchLineForward: move to line '%d' failed", startLine)
+	}
+
+	currentLineNbr := startLine
+
+	// starting at the previous line, iterate to start of file matching regex
+	for e = e.Prev(); e != nil; e = e.Prev() {
+		currentLineNbr--
+		if re.MatchString(e.Value.(Line).Line) {
+			return currentLineNbr, nil
+		}
+	}
+
+	// now iterate from end of file back to 'startLine' matching regex
+	for currentLineNbr, e = buffer.Len(), buffer.Back(); currentLineNbr != startLine; e, currentLineNbr = e.Prev(), currentLineNbr-1 {
+		if re.MatchString(e.Value.(Line).Line) {
+			return currentLineNbr, nil
+		}
+	}
+
+	return -1, fmt.Errorf("mo matching line found")
 }
 
 /*

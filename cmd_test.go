@@ -9,7 +9,7 @@ import (
 func TestDelete(t *testing.T) {
 	state := NewState()
 	state.Buffer = createListOfLines([]string{"1", "2", "3", "4", "5"})
-	cmd := Command{AddressRange{Address{addr: 2}, Address{addr: 3}, separatorComma}, commandDelete, ""}
+	cmd := Command{newValidRange("2,3"), commandDelete, ""}
 
 	// to capture the output
 	var buff bytes.Buffer               // implements io.Writer
@@ -28,7 +28,7 @@ func TestDelete(t *testing.T) {
 
 	//  delete whole file
 	state.Buffer = createListOfLines([]string{"1", "2", "3", "4", "5"})
-	cmd = Command{AddressRange{Address{addr: 1}, Address{addr: 5}, separatorComma}, commandDelete, ""}
+	cmd = Command{newValidRange("1, 5"), commandDelete, ""}
 	buff.Reset()
 	err = cmd.CmdDelete(state, true)
 	checkError(t, err)
@@ -45,7 +45,7 @@ func TestDelete(t *testing.T) {
 func TestPrintRange(t *testing.T) {
 	state := State{}
 	state.Buffer = createListOfLines([]string{"1", "2", "3", "4", "5"})
-	cmd := Command{AddressRange{Address{addr: 2}, Address{addr: 3}, separatorComma}, commandPrint, ""}
+	cmd := Command{newValidRange("2, 3"), commandPrint, ""}
 
 	// to capture the output
 	var buff bytes.Buffer // implements io.Writer
@@ -57,7 +57,7 @@ func TestPrintRange(t *testing.T) {
 	}
 
 	buff.Reset()
-	cmd = Command{AddressRange{Address{addr: 1}, Address{addr: 4}, separatorComma}, commandPrint, ""}
+	cmd = Command{newValidRange("1, 4"), commandPrint, ""}
 	err = _printRange(&buff, cmd, &state, false)
 	checkError(t, err)
 	if buff.String() != "1\n2\n3\n4\n" {
@@ -65,7 +65,7 @@ func TestPrintRange(t *testing.T) {
 	}
 
 	buff.Reset()
-	cmd = Command{AddressRange{Address{addr: 3}, Address{addr: 3}, separatorComma}, commandPrint, ""}
+	cmd = Command{newValidRange("3, 3"), commandPrint, ""}
 	err = _printRange(&buff, cmd, &state, false)
 	checkError(t, err)
 	if buff.String() != "3\n" {

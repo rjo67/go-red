@@ -11,14 +11,18 @@ import (
 )
 
 // suffixes for the 's' command
-const suffixGlobal string = "g" // every match is replaced
-const suffixList string = "l"   // list
-const suffixNumber string = "n" // number
-const suffixPrint string = "p"  // print
+const (
+	suffixGlobal string = "g" // every match is replaced
+	suffixList   string = "l" // list
+	suffixNumber string = "n" // number
+	suffixPrint  string = "p" // print
+)
 
-var errSyntaxMissingDelimiter error = errors.New("missing delimiter")
-var errNoSubstitutions error = errors.New("no substitution performed")
-var errNoPreviousRegex error = errors.New("no previous regex")
+var (
+	errSyntaxMissingDelimiter error = errors.New("missing delimiter")
+	errNoSubstitutions        error = errors.New("no substitution performed")
+	errNoPreviousRegex        error = errors.New("no previous regex")
+)
 
 /*
 CmdGlobal processes the global command, which makes two passes over the file.
@@ -44,14 +48,14 @@ CmdGlobal processes the global command, which makes two passes over the file.
 */
 func (cmd Command) CmdGlobal(state *State) error {
 	currentLineNbr := state.lineNbr
-	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state)
+	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
 
 	// find matching lines
 
-	fmt.Println("not yet", startLineNbr, endLineNbr, currentLineNbr)
+	fmt.Println("not yet implemented", startLineNbr, endLineNbr, currentLineNbr)
 	return nil
 }
 
@@ -101,7 +105,7 @@ CmdSubstitute replaces text in the addressed lines matching a regular expression
 */
 func (cmd Command) CmdSubstitute(state *State) error {
 
-	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state)
+	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}

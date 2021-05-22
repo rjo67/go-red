@@ -276,7 +276,7 @@ CmdDelete deletes the addressed lines from the buffer.
  (This will be affected by the value of state.processingUndo)
 */
 func (cmd Command) CmdDelete(state *State, addUndo bool) error {
-	startLineNbr, endLineNbr, err := cmd.AddrRange.calculateStartAndEndLineNumbers(state)
+	startLineNbr, endLineNbr, err := cmd.AddrRange.calculateStartAndEndLineNumbers(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
@@ -403,7 +403,7 @@ func (cmd Command) CmdJoin(state *State) error {
 	if !cmd.AddrRange.IsAddressRangeSpecified() {
 		return nil
 	} else {
-		if startLineNbr, endLineNbr, err = cmd.AddrRange.calculateStartAndEndLineNumbers(state); err != nil {
+		if startLineNbr, endLineNbr, err = cmd.AddrRange.calculateStartAndEndLineNumbers(state.lineNbr, state.Buffer); err != nil {
 			return err
 		}
 	}
@@ -481,7 +481,7 @@ CmdMove moves lines in the buffer.
 */
 func (cmd Command) CmdMove(state *State) error {
 	// default is current line (for both start/end, and dest)
-	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state)
+	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
@@ -660,7 +660,7 @@ CmdTransfer copies (i.e., transfers) the addressed lines to after the right-hand
  The current address is set to the address of the last line copied.
 */
 func (cmd Command) CmdTransfer(state *State) error {
-	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state)
+	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
@@ -750,7 +750,7 @@ func (cmd Command) CmdWrite(state *State) error {
 		startLineNbr = 1
 		endLineNbr = state.Buffer.Len()
 	} else {
-		startLineNbr, endLineNbr, err = cmd.AddrRange.calculateStartAndEndLineNumbers(state)
+		startLineNbr, endLineNbr, err = cmd.AddrRange.calculateStartAndEndLineNumbers(state.lineNbr, state.Buffer)
 		if err != nil {
 			return err
 		}
@@ -778,7 +778,7 @@ CmdYank copies (yanks) the addressed lines to the cut buffer.
 */
 func (cmd Command) CmdYank(state *State) error {
 	currentAddress := state.lineNbr // save for later
-	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state)
+	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
@@ -952,7 +952,7 @@ func getFilename(potentialFilename string, state *State, setDefault bool) (filen
 }
 
 func _printRange(writer io.Writer, cmd Command, state *State, printLineNumbers bool) error {
-	startLineNbr, endLineNbr, err := cmd.AddrRange.calculateStartAndEndLineNumbers(state)
+	startLineNbr, endLineNbr, err := cmd.AddrRange.calculateStartAndEndLineNumbers(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
@@ -995,18 +995,12 @@ func _printLine(writer io.Writer, lineNbr int, str string, printLineNumbers bool
 }
 
 /**
- * finds element in the buffer corresponding to the given line number.
+ * Returns element in the buffer corresponding to the given line number.
  */
 func _findLine(requiredLine int, buffer *list.List) *list.Element {
 	// TODO? always starts at the top of the file ...
-	lineNbr := 1
-	e := buffer.Front()
-	for ; e != nil; e = e.Next() {
-		if requiredLine == lineNbr {
-			break
-		} else {
-			lineNbr++
-		}
+	lineNbr, e := 1, buffer.Front()
+	for ; e != nil && lineNbr != requiredLine; e, lineNbr = e.Next(), lineNbr+1 {
 	}
 	// double check
 	if requiredLine != lineNbr {

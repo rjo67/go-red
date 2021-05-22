@@ -12,76 +12,70 @@ func TestRangeErrors(t *testing.T) {
 	}{
 		{"2,1"},
 		{"1,2--"},
+		{"+3,-2"},
+		{"+ 3 , -2"},
 	}
-	for _, test := range data {
-		t.Run(fmt.Sprintf(">>%s<<", test.addrRange), func(t *testing.T) {
-			addr, err := newRange(test.addrRange)
-			if err != nil {
-				// ok
-			} else {
-				t.Errorf("expected error for input string, got: %v", addr)
-			}
-		})
-	}
-}
-
-// tests for ranges with the +/- syntax (where the offset has to be checked)
-func TestCreateRangeOffsets(t *testing.T) {
-	data := []struct {
-		addrRange                          string
-		expectedStart, expectedStartOffset int
-		expectedEnd, expectedEndOffset     int
-	}{
-		{"+,5", currentLine, 1, 5, 0},
-		{"-,+", currentLine, -1, currentLine, +1},
-		{"++,$", currentLine, 2, endOfFile, 0},
-		{"+ ++ +,$", currentLine, 4, endOfFile, 0},
-		{"---,9", currentLine, -3, 9, 0},
-		{"- --  -- ,9", currentLine, -5, 9, 0},
-		{"+3,-22", currentLine, 3, currentLine, -22},
-		{"-1,+2", currentLine, -1, currentLine, +2},
-		{"+1", currentLine, +1, currentLine, +1},
-		{"+ 3 , -22", currentLine, 4, currentLine, -22},
-		{"+ 3 , - 22", currentLine, 4, currentLine, 21},
-	}
-
 	for _, test := range data {
 		t.Run(fmt.Sprintf(">>%s<<", test.addrRange), func(t *testing.T) {
 			r, err := newRange(test.addrRange)
 			if err != nil {
 				t.Errorf("error: %s", err)
-			} else if r.start.addr != test.expectedStart {
-				t.Errorf("bad start: %d, expected: %d", r.start.addr, test.expectedStart)
-			} else if r.start.offset != test.expectedStartOffset {
-				t.Errorf("bad start offset: %d, expected: %d", r.start.offset, test.expectedStartOffset)
-			} else if r.end.addr != test.expectedEnd {
-				t.Errorf("bad end: %d, expected: %d", r.end.addr, test.expectedEnd)
-			} else if r.end.offset != test.expectedEndOffset {
-				t.Errorf("bad end offset: %d, expected: %d", r.end.offset, test.expectedEndOffset)
+			} else {
+				start, end, err := r.calculateStartAndEndLineNumbers(1, createListOfLines([]string{"1", "2", "3", "4 123", "5", "6 456regex", "7", "8"}))
+				if err != nil {
+					// ok
+				} else {
+					t.Errorf("expected range error, got start=%d, end=%d", start, end)
+				}
 			}
 		})
 	}
 }
 
-// tests for address ranges, not including +/- syntax
-func TestCreateRange(t *testing.T) {
+// tests for ranges, checking the 'real' line numbers
+func TestCreateAddressRange(t *testing.T) {
 	data := []struct {
 		addrRange                  string
+		startLine                  int
 		expectedStart, expectedEnd int
 	}{
-		{"1,2", 1, 2},
-		{"99,999", 99, 999},
-		{"9,", 9, 9},
-		{"9", 9, 9},
-		{",12", startOfFile, 12}, // If only the second address is given, the resulting address pairs are '1,addr' and '.;addr' respectively
-		{";12", currentLine, 12}, // If only the second address is given, the resulting address pairs are '1,addr' and '.;addr' respectively
-		{",", startOfFile, endOfFile},
-		{"4,$", 4, endOfFile},
-		{"$,$", endOfFile, endOfFile},
-		{"$", endOfFile, endOfFile},
-		{"5", 5, 5},
-		{"", notSpecified, notSpecified},
-		{".", currentLine, currentLine},
+		{"+,5", 2, 3, 5},
+		{"-,+", 2, 1, 3},
+		{"++,$", 1, 3, 8},
+		{"+ ++ +,$", 3, 7, 8},
+		{"---,8", 8, 5, 8},
+		{"- --  -- ,8", 7, 2, 8},
+		{"-1,+2", 3, 2, 5},
+		{"+1", 4, 5, 5},
+		{"+ 2 , +3", 4, 7, 7},
+		{"1,2", 1, 1, 2},
+		{"7,8", 2, 7, 8},
+		{"7,", 5, 7, 7},
+		{"8", 3, 8, 8},
+		{",7", 2, 2, 7}, // If only the second address is given, the resulting address pair is '.,addr'
+		{";8", 2, 2, 8}, // If only the second address is given, the resulting address pair is '.;addr'
+		{",", 3, 1, 8},  // (1,$)
+		{";", 3, 3, 8},  // (.,$)
+		{"4,$", 2, 4, 8},
+		{"$,$", 4, 8, 8},
+		{"$", 3, 8, 8},
+		{"5", 3, 5, 5},
+		{"", 3, 3, 3}, // default to current line
+		{".", 5, 5, 5},
+		// marks
+		//{"'a,'b", mark, "a", mark, "b"},
+		//{"'a,/123/", mark, "a", regexForward, "123"},
+		//{"'a ,'b", mark, "a", mark, "b"},
+		//{"'b,?abc?", mark, "b", regexBackward, "abc"},
+		//{"'a, /123/", mark, "a", regexForward, "123"},
+		//{"'b  ,  ?abc?", mark, "b", regexBackward, "abc"},
+		//{"?abc?,'d", regexBackward, "abc", mark, "d"},
+		//{"?abc?,  'd", regexBackward, "abc", mark, "d"},
+		// regex
+		{"/123/,/456/", 2, 4, 6},
+		{"/123/ ,/456/    ", 1, 4, 6},
+		{"/123/,?456?", 1, 4, 6},
+		{"   /123/,?456?", 1, 4, 6},
 	}
 
 	for _, test := range data {
@@ -89,54 +83,16 @@ func TestCreateRange(t *testing.T) {
 			r, err := newRange(test.addrRange)
 			if err != nil {
 				t.Errorf("error: %s", err)
-			} else if r.start.addr != test.expectedStart {
-				t.Errorf("bad start: %d, expected: %d", r.start.addr, test.expectedStart)
-			} else if r.end.addr != test.expectedEnd {
-				t.Errorf("bad end: %d, expected: %d", r.end.addr, test.expectedEnd)
+			} else {
+				start, end, err := r.calculateStartAndEndLineNumbers(test.startLine, createListOfLines([]string{"1", "2", "3", "4 123", "5", "6 456regex", "7", "8"}))
+				if err != nil {
+					t.Errorf("error: %s", err)
+				} else if start != test.expectedStart {
+					t.Errorf("bad start: %d, expected: %d", start, test.expectedStart)
+				} else if end != test.expectedEnd {
+					t.Errorf("bad end: %d, expected: %d", end, test.expectedEnd)
+				}
 			}
 		})
 	}
 }
-
-/*
-func TestSpecialRange(t *testing.T) {
-	data := []struct {
-		addrRange         string
-		expectedStartType int
-		expectedStartInfo string
-		expectedEndType   int
-		expectedEndInfo   string
-	}{
-		{"'a,'b", mark, "a", mark, "b"},
-		{"'a,/123/", mark, "a", regexForward, "123"},
-		{"/123/,/456/", regexForward, "123", regexForward, "456"},
-		{"/123/,?456?", regexForward, "123", regexBackward, "456"},
-		{"'b,?abc?", mark, "b", regexBackward, "abc"},
-		{"?abc?,'d", regexBackward, "abc", mark, "d"},
-		// some examples with spaces
-		{"'a ,'b", mark, "a", mark, "b"},
-		{"'a, /123/", mark, "a", regexForward, "123"},
-		{"/123/ ,/456/    ", regexForward, "123", regexForward, "456"},
-		{"   /123/,?456?", regexForward, "123", regexBackward, "456"},
-		{"'b  ,  ?abc?", mark, "b", regexBackward, "abc"},
-		{"?abc?,  'd", regexBackward, "abc", mark, "d"},
-	}
-
-	for _, test := range data {
-		t.Run(fmt.Sprintf(">>%s<<", test.addrRange), func(t *testing.T) {
-			r, err := newRange(test.addrRange)
-			if err != nil {
-				t.Errorf("error: %s", err)
-			} else if r.start.special.addrType != test.expectedStartType {
-				t.Errorf("bad start type: %d, expected: %d", r.start.special.addrType, test.expectedStartType)
-			} else if r.start.special.info != test.expectedStartInfo {
-				t.Errorf("bad start info: %s, expected: %s", r.start.special.info, test.expectedStartInfo)
-			} else if r.end.special.addrType != test.expectedEndType {
-				t.Errorf("bad end type: %d, expected: %d", r.end.special.addrType, test.expectedEndType)
-			} else if r.end.special.info != test.expectedEndInfo {
-				t.Errorf("bad end info: %s, expected: %s", r.end.special.info, test.expectedEndInfo)
-			}
-		})
-	}
-}
-*/
