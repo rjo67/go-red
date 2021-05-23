@@ -11,7 +11,7 @@ func TestMark(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error %s", err)
 	}
-	_, err = ProcessCommand(cmd, state, nil, false)
+	_, err = cmd.ProcessCommand(state, nil, false)
 	if err != nil {
 		t.Fatalf("error %s", err)
 	}
@@ -34,7 +34,7 @@ func TestMultipleMarks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error %s", err)
 	}
-	_, err = ProcessCommand(cmd, state, nil, false)
+	_, err = cmd.ProcessCommand(state, nil, false)
 	if err != nil {
 		t.Fatalf("error %s", err)
 	}

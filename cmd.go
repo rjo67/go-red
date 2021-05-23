@@ -16,12 +16,12 @@ import (
 const commandAppend string = "a"
 const commandChange string = "c"
 const commandDelete string = "d"
-const CommandEdit string = "e"
-const CommandEditUnconditionally string = "E"
-const CommandFilename string = "f"
+const commandEdit string = "e"
+const commandEditUnconditionally string = "E"
+const commandFilename string = "f"
 const commandGlobal string = "g"
 const commandGlobalInteractive string = "G"
-const CommandHelp string = "h" // a startling departure from the ed range of commands ...
+const commandHelp string = "h" // a startling departure from the ed range of commands ...
 const commandInsert string = "i"
 const commandJoin string = "j"
 const commandMark string = "k"
@@ -29,13 +29,13 @@ const commandList string = "l" // print suffix
 const commandMove string = "m"
 const commandNumber string = "n" // print suffix
 const commandPrint string = "p"  // print suffix
-const CommandPrompt string = "P"
-const CommandQuit string = "q"
-const CommandQuitUnconditionally string = "Q"
+const commandPrompt string = "P"
+const commandQuit string = "q"
+const commandQuitUnconditionally string = "Q"
 const commandRead string = "r"
 const commandSubstitute string = "s"
 const commandTransfer string = "t"
-const CommandUndo string = "u"
+const commandUndo string = "u"
 const commandInverseGlobal string = "v"
 const commandInverseGlobalInteractive string = "V"
 const commandWrite string = "w"
@@ -352,12 +352,12 @@ func (cmd Command) CmdHelp(state *State) error {
 	fmt.Println(" ", commandAppend, "Appends text after the addressed line.")
 	fmt.Println(" ", commandChange, "Changes lines in the buffer.")
 	fmt.Println(" ", commandDelete, "Deletes the addressed lines from the buffer.")
-	fmt.Println(" ", CommandEdit, "Edits file, and sets the default filename.")
-	fmt.Println(" ", CommandEditUnconditionally, "Edits file regardless of any changes in current buffer.")
-	fmt.Println(" ", CommandFilename, "Sets the default filename.")
+	fmt.Println(" ", commandEdit, "Edits file, and sets the default filename.")
+	fmt.Println(" ", commandEditUnconditionally, "Edits file regardless of any changes in current buffer.")
+	fmt.Println(" ", commandFilename, "Sets the default filename.")
 	fmt.Println(" ", commandGlobal, "Executes the command-list for all matching lines.")
 	fmt.Println(" ", commandGlobalInteractive, "Interactive 'global'.")
-	fmt.Println(" ", CommandHelp, "Displays this help.")
+	fmt.Println(" ", commandHelp, "Displays this help.")
 	fmt.Println(" ", commandInsert, "Inserts text before the addressed line.")
 	fmt.Println(" ", commandJoin, "Joins the addressed lines, replacing them by a single line containing the joined text.")
 	fmt.Println(" ", commandMark, "Marks the current line.")
@@ -365,13 +365,13 @@ func (cmd Command) CmdHelp(state *State) error {
 	fmt.Println(" ", commandMove, "Moves lines in the buffer.")
 	fmt.Println(" ", commandNumber, "Displays the addressed lines with line numbers.")
 	fmt.Println(" ", commandPrint, "Prints the addressed lines.")
-	fmt.Println(" ", CommandPrompt, "Sets the prompt.")
-	fmt.Println(" ", CommandQuit, "Quits the editor.")
-	fmt.Println(" ", CommandQuitUnconditionally, "Quits the editor without saving changes.")
+	fmt.Println(" ", commandPrompt, "Sets the prompt.")
+	fmt.Println(" ", commandQuit, "Quits the editor.")
+	fmt.Println(" ", commandQuitUnconditionally, "Quits the editor without saving changes.")
 	fmt.Println(" ", commandRead, "Reads file and appends it after the addressed line.")
 	fmt.Println(" ", commandSubstitute, "Replaces text in the addressed lines matching a regular expression.")
 	fmt.Println(" ", commandTransfer, "Copies (transfers) the addressed lines to after the right-hand destination address.")
-	fmt.Println(" ", CommandUndo, "Undoes the previous command.")
+	fmt.Println(" ", commandUndo, "Undoes the previous command.")
 	fmt.Println(" ", commandInverseGlobal, "As 'global' but acts on all lines NOT matching the regex.")
 	fmt.Println(" ", commandInverseGlobalInteractive, "Interactive 'inverse-global'.")
 	fmt.Println(" ", commandWrite, "Writes the addressed lines to a file.")
@@ -715,7 +715,7 @@ func (cmd Command) CmdUndo(state *State) error {
 	case internalCommandUndoSubst:
 		err = handleUndoSubst(undo, state)
 	default:
-		_, err = ProcessCommand(undo.cmd, state, undo.text, false)
+		_, err = undo.cmd.ProcessCommand(state, undo.text, false)
 	}
 	state.processingUndo = false
 	return err
@@ -739,7 +739,7 @@ func (cmd Command) CmdWrite(state *State) error {
 	currentLine := state.lineNbr
 
 	// handle command sequence 'wq'
-	filename := strings.TrimPrefix(cmd.restOfCmd, CommandQuit)
+	filename := strings.TrimPrefix(cmd.restOfCmd, commandQuit)
 	filename, err := getFilename(strings.TrimSpace(filename), state, true)
 	if err != nil {
 		return err
@@ -1040,21 +1040,34 @@ func moveToLine(requiredLine int, state *State) {
 
  Returns TRUE if the quit command has been given.
 */
-func ProcessCommand(cmd Command, state *State, enteredText *list.List, inGlobalCommand bool) (quit bool, err error) {
+func (cmd Command) ProcessCommand(state *State, enteredText *list.List, inGlobalCommand bool) (quit bool, err error) {
 	// following commands are not allowed whilst procesing a global "g" command
 	if inGlobalCommand {
 		switch cmd.Cmd {
-		case CommandEdit, CommandEditUnconditionally,
+		case commandEdit, commandEditUnconditionally,
 			commandGlobal, commandGlobalInteractive,
 			commandInverseGlobal, commandInverseGlobalInteractive,
-			CommandHelp,
-			CommandQuit, CommandQuitUnconditionally,
-			CommandUndo, commandWrite, commandWriteAppend:
+			commandHelp,
+			commandQuit, commandQuitUnconditionally,
+			commandUndo, commandWrite, commandWriteAppend:
 			return false, errNotAllowedInGlobalCommand
 		default:
 			//ok
 		}
 	}
+	// check for commands which cannot take ranges
+	switch cmd.Cmd {
+	case commandEdit, commandEditUnconditionally,
+		commandFilename, commandHelp, commandPrompt,
+		commandQuit, commandQuitUnconditionally,
+		commandUndo:
+		if cmd.AddrRange.IsSpecified() {
+			err = ErrRangeShouldNotBeSpecified
+		}
+	default:
+		//ok
+	}
+
 	switch cmd.Cmd {
 	case commandAppend, commandInsert:
 		err = cmd.CmdAppendInsert(state, enteredText)
@@ -1062,21 +1075,21 @@ func ProcessCommand(cmd Command, state *State, enteredText *list.List, inGlobalC
 		err = cmd.CmdChange(state, enteredText)
 	case commandDelete:
 		err = cmd.CmdDelete(state, true)
-	case CommandEdit:
+	case commandEdit:
 		if state.changedSinceLastWrite {
 			fmt.Println(unsavedChanges)
 		} else {
 			err = cmd.CmdEdit(state)
 		}
-	case CommandEditUnconditionally:
+	case commandEditUnconditionally:
 		err = cmd.CmdEdit(state)
-	case CommandFilename:
+	case commandFilename:
 		state.defaultFilename = strings.TrimSpace(cmd.restOfCmd)
 	case commandGlobal:
 		err = cmd.CmdGlobal(state)
 	case commandGlobalInteractive:
 		fmt.Println("not yet implemented")
-	case CommandHelp:
+	case commandHelp:
 		err = cmd.CmdHelp(state)
 	case commandInverseGlobal:
 		fmt.Println("not yet implemented")
@@ -1092,10 +1105,10 @@ func ProcessCommand(cmd Command, state *State, enteredText *list.List, inGlobalC
 		err = cmd.CmdMove(state)
 	case commandNumber, commandPrint:
 		err = cmd.CmdPrint(state)
-	case CommandPrompt:
+	case commandPrompt:
 		state.ShowPrompt = !state.ShowPrompt
-	case CommandQuit, CommandQuitUnconditionally:
-		if cmd.Cmd == CommandQuit && state.changedSinceLastWrite {
+	case commandQuit, commandQuitUnconditionally:
+		if cmd.Cmd == commandQuit && state.changedSinceLastWrite {
 			fmt.Println(unsavedChanges)
 		} else {
 			quit = true
@@ -1106,11 +1119,11 @@ func ProcessCommand(cmd Command, state *State, enteredText *list.List, inGlobalC
 		err = cmd.CmdSubstitute(state)
 	case commandTransfer:
 		err = cmd.CmdTransfer(state)
-	case CommandUndo:
+	case commandUndo:
 		err = cmd.CmdUndo(state)
 	case commandWrite:
 		err = cmd.CmdWrite(state)
-		quit = (cmd.Cmd == commandWrite && strings.HasPrefix(cmd.restOfCmd, CommandQuit))
+		quit = (cmd.Cmd == commandWrite && strings.HasPrefix(cmd.restOfCmd, commandQuit))
 	case commandWriteAppend:
 		fmt.Println("not yet implemented")
 	case commandPut:

@@ -4,10 +4,11 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"github.com/rjo67/red"
 	"os"
 	"runtime"
 	"time"
+
+	"github.com/rjo67/red"
 )
 
 /*
@@ -62,22 +63,8 @@ func mainloop(state *red.State) {
 				}
 
 				var err error
+				quit, err = cmd.ProcessCommand(state, nil, false)
 
-				// first check for commands which cannot take ranges
-				switch cmd.Cmd {
-				case red.CommandEdit, red.CommandEditUnconditionally,
-					red.CommandFilename, red.CommandHelp, red.CommandPrompt,
-					red.CommandQuit, red.CommandQuitUnconditionally,
-					red.CommandUndo:
-					if cmd.AddrRange.IsSpecified() {
-						err = red.ErrRangeShouldNotBeSpecified
-					}
-				default:
-					//ok
-				}
-				if err == nil {
-					quit, err = red.ProcessCommand(cmd, state, nil, false)
-				}
 				// each command call can return an error, which will be displayed here
 				if err != nil {
 					fmt.Printf("error: %s\n", err)
