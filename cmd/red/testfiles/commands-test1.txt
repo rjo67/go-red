@@ -1,0 +1,2 @@
+1s/first/changed/
+w testfiles/output/test1.txt

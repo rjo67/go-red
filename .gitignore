@@ -13,7 +13,7 @@
 *.out
 
 # my test files
-*.txt
+tmp/*
 
 # debugging output vscode
 .vscode/
