@@ -49,7 +49,7 @@ CmdGlobal processes the global command, which makes two passes over the file.
 */
 func (cmd Command) CmdGlobal(state *State) error {
 	currentLineNbr := state.lineNbr
-	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state.lineNbr, state.Buffer)
+	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ CmdSubstitute replaces text in the addressed lines matching a regular expression
 */
 func (cmd Command) CmdSubstitute(state *State) error {
 
-	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state.lineNbr, state.Buffer)
+	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
@@ -239,7 +239,7 @@ func replaceLines(writer io.Writer, startLineNbr, endLineNbr int,
 			if err != nil {
 				return 0, nil, err
 			}
-			undoCommand := Command{AddressRange{currentLine, currentLine, separatorComma}, commandChange, ""}
+			undoCommand := Command{addrRange: AddressRange{currentLine, currentLine, separatorComma}, cmd: commandChange, restOfCmd: ""}
 			tmpList := list.New()
 			tmpList.PushFront(line)
 			undoList.PushBack(Undo{undoCommand, tmpList, Command{} /* TODO */})

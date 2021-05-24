@@ -86,11 +86,9 @@ func TestCreateAddressRange(t *testing.T) {
 				start, end, err := r.calculateStartAndEndLineNumbers(test.startLine, createListOfLines([]string{"1", "2", "3", "4 123", "5", "6 456regex", "7", "8"}))
 				if err != nil {
 					t.Errorf("error: %s", err)
-				} else if start != test.expectedStart {
-					t.Errorf("bad start: %d, expected: %d", start, test.expectedStart)
-				} else if end != test.expectedEnd {
-					t.Errorf("bad end: %d, expected: %d", end, test.expectedEnd)
 				}
+				assertInt(t, "bad start", start, test.expectedStart)
+				assertInt(t, "bad end", end, test.expectedEnd)
 			}
 		})
 	}

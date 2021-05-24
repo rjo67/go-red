@@ -59,12 +59,11 @@ func (ra AddressRange) getAddressRange(currentLineNbr int, buffer *list.List) (s
  Calculates the start and end line numbers from the given address range.
  It is an error if start > end.
 */
-func (ra AddressRange) calculateStartAndEndLineNumbers(currentLineNbr int, buffer *list.List) (startLine int, endLine int, err error) {
+func (ra *AddressRange) calculateStartAndEndLineNumbers(currentLineNbr int, buffer *list.List) (startLine int, endLine int, err error) {
 	// special case 1: first address empty -> {1,addr} or {.;addr}
 	if ra.start.isNotSpecified() {
 		switch ra.separator {
 		case separatorComma:
-			//TODO does this overwrite ra.start correctly?
 			if ra.start, err = newAddress("1"); err != nil {
 				return -1, -1, err
 			}

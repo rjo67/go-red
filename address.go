@@ -50,11 +50,33 @@ type Address struct {
 	internal []addressPart // stores the address as parsed
 }
 
-var (
-	errInvalidDestinationAddress error = errors.New("invalid line for destination")
-	errUnrecognisedAddress       error = errors.New("unrecognised address")
-	errInvalidLine               error = errors.New("invalid line")
-)
+// AddressError records an address error.
+type AddressError struct {
+	Msg string
+	Err error
+}
+
+func (e *AddressError) Error() string {
+	if e.Err != nil {
+		return e.Msg + ": " + e.Err.Error()
+	} else {
+		return e.Msg
+	}
+}
+
+func (e *AddressError) Unwrap() error { return e.Err }
+
+func errorInvalidLine(str string, err error) error {
+	return &AddressError{Msg: fmt.Sprintf("invalid line: %s", str), Err: err}
+}
+
+// errorImvalidDestination is used by commands which take a 'destination'
+func errorInvalidDestination(str string, err error) error {
+	return &AddressError{Msg: fmt.Sprintf("invalid destination: %s", str), Err: err}
+}
+func errorUnrecognisedAddress(str string, err error) error {
+	return &AddressError{Msg: fmt.Sprintf("unrecognised address: %s", str), Err: err}
+}
 
 /*
 Regex for the parts of an address.
@@ -173,7 +195,7 @@ func newAddress(addrStr string) (Address, error) {
 			// check the number is valid (should be ok, since the RE matched, but still...)
 			_, err := strconv.Atoi(matches["signednbr"])
 			if err != nil {
-				return address, errUnrecognisedAddress
+				return address, errorUnrecognisedAddress(matches["signednbr"], err)
 			}
 			addrPart = addressPart{addrIdent: identSignedNbr, info: matches["signednbr"]}
 		default:
@@ -270,8 +292,11 @@ func (addr Address) calculateActualLineNumber(currentLineNbr int, buffer *list.L
 			return -1, fmt.Errorf("address part '%s' not recognised", addrPart.addrIdent)
 		}
 	}
-	if lineNbr < 0 || lineNbr > buffer.Len() {
-		return -1, errInvalidLine
+	if lineNbr < 0 {
+		return -1, errorInvalidLine(fmt.Sprintf("lineNbr: %d", lineNbr), nil)
+	}
+	if lineNbr > buffer.Len() {
+		return -1, errorInvalidLine(fmt.Sprintf("lineNbr: %d, max line: %d", lineNbr, buffer.Len()), nil)
 	}
 	return lineNbr, nil
 }

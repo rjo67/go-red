@@ -71,7 +71,7 @@ func (state *State) addUndo(start, end int, command string, text *list.List, ori
 	if !state.processingUndo {
 		startAddr := newAbsoluteAddress(start)
 		endAddr := newAbsoluteAddress(end)
-		undoCommand := Undo{Command{AddressRange{startAddr, endAddr, separatorComma}, command, ""}, text, origCmd}
+		undoCommand := Undo{Command{addrRange: AddressRange{startAddr, endAddr, separatorComma}, cmd: command, restOfCmd: ""}, text, origCmd}
 		if state.Debug {
 			fmt.Println("added undo:", undoCommand)
 		}

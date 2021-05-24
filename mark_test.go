@@ -60,9 +60,12 @@ func TestMultipleMarks(t *testing.T) {
 }
 
 func TestInvalidNameOfMark(t *testing.T) {
+	var cmd Command
+	var err error
 	// marknames must be just one char a-z
-	cmd, err := ParseCommand("2kabc")
-	checkError(t, err)
+	if cmd, err = ParseCommand("2kabc"); err != nil {
+		t.Fatalf("error %s", err)
+	}
 	err = cmd.CmdMark(NewState())
 	if err != errBadMarkname {
 		t.Fatalf("expected 'errBadMarkname'")

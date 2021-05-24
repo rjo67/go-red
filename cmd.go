@@ -13,72 +13,104 @@ import (
 )
 
 // ---- constants for the available commands
-const commandAppend string = "a"
-const commandChange string = "c"
-const commandDelete string = "d"
-const commandEdit string = "e"
-const commandEditUnconditionally string = "E"
-const commandFilename string = "f"
-const commandGlobal string = "g"
-const commandGlobalInteractive string = "G"
-const commandHelp string = "h" // a startling departure from the ed range of commands ...
-const commandInsert string = "i"
-const commandJoin string = "j"
-const commandMark string = "k"
-const commandList string = "l" // print suffix
-const commandMove string = "m"
-const commandNumber string = "n" // print suffix
-const commandPrint string = "p"  // print suffix
-const commandPrompt string = "P"
-const commandQuit string = "q"
-const commandQuitUnconditionally string = "Q"
-const commandRead string = "r"
-const commandSubstitute string = "s"
-const commandTransfer string = "t"
-const commandUndo string = "u"
-const commandInverseGlobal string = "v"
-const commandInverseGlobalInteractive string = "V"
-const commandWrite string = "w"
-const commandWriteAppend string = "W"
-const commandPut string = "x"
-const commandYank string = "y"
-const commandScroll string = "z"
-const commandComment string = "#"
-const commandLinenumber string = "="
+const (
+	commandAppend                   string = "a"
+	commandChange                   string = "c"
+	commandDelete                   string = "d"
+	commandEdit                     string = "e"
+	commandEditUnconditionally      string = "E"
+	commandFilename                 string = "f"
+	commandGlobal                   string = "g"
+	commandGlobalInteractive        string = "G"
+	commandHelp                     string = "h" // a startling departure from the ed range of commands ...
+	commandInsert                   string = "i"
+	commandJoin                     string = "j"
+	commandMark                     string = "k"
+	commandList                     string = "l" // print suffix
+	commandMove                     string = "m"
+	commandNumber                   string = "n" // print suffix
+	commandPrint                    string = "p" // print suffix
+	commandPrompt                   string = "P"
+	commandQuit                     string = "q"
+	commandQuitUnconditionally      string = "Q"
+	commandRead                     string = "r"
+	commandSubstitute               string = "s"
+	commandTransfer                 string = "t"
+	commandUndo                     string = "u"
+	commandInverseGlobal            string = "v"
+	commandInverseGlobalInteractive string = "V"
+	commandWrite                    string = "w"
+	commandWriteAppend              string = "W"
+	commandPut                      string = "x"
+	commandYank                     string = "y"
+	commandScroll                   string = "z"
+	commandComment                  string = "#"
+	commandLinenumber               string = "="
 
-// this is an internal command to undo the 'move' command (which requires two steps)
-const internalCommandUndoMove string = ")"
-
-// and this is an internal command to undo the 'subst' command (which is 1..n 'change' commands)
-const internalCommandUndoSubst string = "("
-
-// returned when an empty line was entered
-const commandNoCommand string = ""
+	internalCommandUndoMove  string = ")" // an internal command to undo the 'move' command (which requires two steps)
+	internalCommandUndoSubst string = "(" // an internal command to undo the 'subst' command (which is 1..n 'change' commands)
+	commandNoCommand         string = ""  // returned when an empty line was entered
+)
 
 const unsavedChanges string = "buffer has unsaved changes"
 
-var errInvalidWindowSize error = errors.New("invalid window size")
-var errBadMarkname error = errors.New("a name of a mark must be one char: a-z")
-var errMissingFilename error = errors.New("filename missing and no default set")
-var errNotAllowedInGlobalCommand error = errors.New("command cannot be used within 'g'/'v'")
-var errNothingToUndo error = errors.New("nothing to undo")
-var errUnrecognisedCommand error = errors.New("unrecognised command")
+var (
+	errInvalidWindowSize         error = errors.New("invalid window size")
+	errBadMarkname               error = errors.New("a name of a mark must be one char: a-z")
+	errMissingFilename           error = errors.New("filename missing and no default set")
+	errNotAllowedInGlobalCommand error = errors.New("command cannot be used within 'g'/'v'")
+	errNothingToUndo             error = errors.New("nothing to undo")
+	errUnrecognisedCommand       error = errors.New("unrecognised command")
+	errAddressHasNotBeenResolved error = errors.New("address has not been resolved")
+)
 
-var singleLetterRE = regexp.MustCompile(`^([a-z])$`)
-var justNumberRE = regexp.MustCompile(`^\s*(\d+)\s*$`)
-var commandLineRE = regexp.MustCompile("(.*?)([acdeEfgGhijklmnpPqQrstuvVwWxyz#=])(.*)")
+var (
+	singleLetterRE = regexp.MustCompile(`^([a-z])$`)
+	justNumberRE   = regexp.MustCompile(`^\s*(\d+)\s*$`)
+	commandLineRE  = regexp.MustCompile("(.*?)([acdeEfgGhijklmnpPqQrstuvVwWxyz#=])(.*)")
+)
 
-/*
-Command stores the command which has been parsed from user input
-*/
-type Command struct {
-	AddrRange AddressRange
-	Cmd       string
-	restOfCmd string
+type resolvedAddress struct {
+	start, end int
 }
 
 /*
-ParseCommand parses a command from the given string.
+Command stores the command which has been parsed from user input.
+*/
+type Command struct {
+	addrRange         AddressRange    // address range as parsed from user input
+	addressIsResolved bool            // will be 'false' by default; true implies resolvedAddress has been set
+	resolved          resolvedAddress // resolved addresses
+	cmd               string          // command identifier
+	restOfCmd         string          // rest of command, if present
+}
+
+func (cmd *Command) resolveAddress(state *State) error {
+	start, end, err := cmd.addrRange.calculateStartAndEndLineNumbers(state.lineNbr, state.Buffer)
+	if err != nil {
+		return err
+	}
+	cmd.resolved = resolvedAddress{start: start, end: end}
+	cmd.addressIsResolved = true
+	return nil
+}
+
+/*
+Copies the current command into a new object, using the resolved addresses,
+but setting the rest of the fields according to the parameters.
+*/
+func (cmd *Command) createNewResolvedCommand(newCmdIdent, newRestOfCmd string) (Command, error) {
+	var newCmd Command
+	if !cmd.addressIsResolved {
+		return newCmd, errAddressHasNotBeenResolved
+	}
+	newCmd = Command{addressIsResolved: true, resolved: resolvedAddress{start: cmd.resolved.start, end: cmd.resolved.end},
+		cmd: newCmdIdent, restOfCmd: newRestOfCmd}
+	return newCmd, nil
+}
+
+/*
+ParseCommand parses the given string and creates a Command object.
 */
 func ParseCommand(str string) (cmd Command, err error) {
 	if strings.TrimSpace(str) == "" {
@@ -87,7 +119,7 @@ func ParseCommand(str string) (cmd Command, err error) {
 		if err != nil {
 			return Command{}, err
 		} else {
-			return Command{addrRange, commandPrint, ""}, nil
+			return Command{addrRange: addrRange, cmd: commandPrint, restOfCmd: ""}, nil
 		}
 	}
 	// check for a number <n> --> equivalent to <n>p
@@ -98,7 +130,7 @@ func ParseCommand(str string) (cmd Command, err error) {
 		if err != nil {
 			return Command{}, err
 		} else {
-			return Command{addrRange, commandPrint, ""}, nil
+			return Command{addrRange: addrRange, cmd: commandPrint, restOfCmd: ""}, nil
 		}
 	}
 	matches = commandLineRE.FindStringSubmatch(str)
@@ -116,7 +148,7 @@ func ParseCommand(str string) (cmd Command, err error) {
 		if err != nil {
 			return Command{}, err
 		} else {
-			return Command{addrRange, cmdString, restOfCmd}, nil
+			return Command{addrRange: addrRange, cmd: cmdString, restOfCmd: restOfCmd}, nil
 		}
 	} else {
 		return Command{}, errUnrecognisedCommand
@@ -124,7 +156,7 @@ func ParseCommand(str string) (cmd Command, err error) {
 }
 
 /*
-CmdAppendInsert appends text to the buffer after the addressed line.
+AppendInsert appends text to the buffer after the addressed line.
  or
 inserts text in the buffer before the addressed line.
 
@@ -138,21 +170,19 @@ inserts text in the buffer before the addressed line.
  If the parameter "inputLines" is specified, this input will be used.
  Otherwise the user must input the required lines, terminated by ".".
 */
-func (cmd Command) CmdAppendInsert(state *State, inputLines *list.List) error {
-	// calc required line (checks if this is a valid line)
-	lineNbr, err := cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
-	if err != nil {
-		return err
+func (cmd Command) AppendInsert(state *State, inputLines *list.List) error {
+	if !cmd.addressIsResolved {
+		return errAddressHasNotBeenResolved
 	}
 
 	var newLines *list.List
 	var nbrLinesEntered int
+	var err error
 	if inputLines != nil {
 		newLines = inputLines
 		nbrLinesEntered = inputLines.Len()
 	} else {
-		newLines, nbrLinesEntered, err = readInputLines()
-		if err != nil {
+		if newLines, nbrLinesEntered, err = readInputLines(); err != nil {
 			return err
 		}
 	}
@@ -165,7 +195,7 @@ func (cmd Command) CmdAppendInsert(state *State, inputLines *list.List) error {
 	// special case: append line 0
 	// or insert with line 0 or 1
 
-	if (cmd.Cmd == commandAppend && lineNbr == 0) || (cmd.Cmd == commandInsert && lineNbr <= 1) {
+	if (cmd.cmd == commandAppend && cmd.resolved.start == 0) || (cmd.cmd == commandInsert && cmd.resolved.start <= 1) {
 		state.Buffer.PushFrontList(newLines)
 		moveToLine(nbrLinesEntered, state)
 		if !state.processingUndo {
@@ -173,8 +203,9 @@ func (cmd Command) CmdAppendInsert(state *State, inputLines *list.List) error {
 		}
 	} else {
 		var startAddrForUndo, endAddrForUndo int
+		lineNbr := cmd.resolved.start
 		// an "insert" at line <n> is the same as an append at line <n-1>
-		if cmd.Cmd == commandInsert {
+		if cmd.cmd == commandInsert {
 			startAddrForUndo = lineNbr
 			endAddrForUndo = lineNbr + nbrLinesEntered - 1
 			lineNbr--
@@ -191,7 +222,7 @@ func (cmd Command) CmdAppendInsert(state *State, inputLines *list.List) error {
 }
 
 /*
-CmdChange changes lines in the buffer.
+Change changes lines in the buffer.
 
  The addressed lines are deleted from the buffer, and text is inserted in their place.
 
@@ -201,25 +232,25 @@ CmdChange changes lines in the buffer.
  the current address is set to the address of the new last line;
  if no lines remain in the buffer, the current address is set to zero.
 */
-func (cmd Command) CmdChange(state *State, inputLines *list.List) error {
-
-	startLineNbr, err := cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
-	if err != nil {
-		return err
+func (cmd Command) Change(state *State, inputLines *list.List) error {
+	if !cmd.addressIsResolved {
+		return errAddressHasNotBeenResolved
 	}
-	if startLineNbr == 0 {
-		return errInvalidLine
+	if cmd.resolved.start == 0 {
+		return fmt.Errorf("change: %w", errorInvalidLine("start line is 0", nil))
 	}
 
-	var newLines *list.List
-	var nbrLinesEntered int
+	var (
+		newLines        *list.List
+		nbrLinesEntered int
+		err             error
+	)
 	if inputLines != nil {
 		newLines = inputLines
 		nbrLinesEntered = inputLines.Len()
 	} else {
 		// get the input, abort if empty
-		newLines, nbrLinesEntered, err = readInputLines()
-		if err != nil {
+		if newLines, nbrLinesEntered, err = readInputLines(); err != nil {
 			return err
 		}
 	}
@@ -228,13 +259,19 @@ func (cmd Command) CmdChange(state *State, inputLines *list.List) error {
 	}
 
 	// delete the lines
-	deleteCmd := Command{cmd.AddrRange, commandDelete, cmd.restOfCmd}
-	deleteCmd.CmdDelete(state, false)
+	deleteCmd, err := cmd.createNewResolvedCommand(commandDelete, cmd.restOfCmd)
+	if err != nil {
+		return err
+	}
+	if err = deleteCmd.Delete(state, false); err != nil {
+		return err
+	}
 	// what's deleted is stored in the cutBuffer
 
 	var atEOF bool
 
 	// adjust the starting lineNbr if we've deleted at the end of the file
+	startLineNbr := cmd.resolved.start
 	if startLineNbr > state.Buffer.Len() {
 		startLineNbr = state.Buffer.Len()
 		atEOF = true
@@ -255,15 +292,15 @@ func (cmd Command) CmdChange(state *State, inputLines *list.List) error {
 }
 
 /*
-CmdComment processes comments.
+Comment processes comments.
 */
-func (cmd Command) CmdComment(state *State) error {
+func (cmd Command) Comment(state *State) error {
 	// does nothing
 	return nil
 }
 
 /*
-CmdDelete deletes the addressed lines from the buffer.
+Delete deletes the addressed lines from the buffer.
 
  The current address is set to the new address of the line after the last line deleted;
  if the lines deleted were originally at the end of the buffer,
@@ -275,16 +312,15 @@ CmdDelete deletes the addressed lines from the buffer.
  If addUndo is true, an undo command will be stored in state.undo.
  (This will be affected by the value of state.processingUndo)
 */
-func (cmd Command) CmdDelete(state *State, addUndo bool) error {
-	startLineNbr, endLineNbr, err := cmd.AddrRange.calculateStartAndEndLineNumbers(state.lineNbr, state.Buffer)
-	if err != nil {
-		return err
+func (cmd Command) Delete(state *State, addUndo bool) error {
+	if !cmd.addressIsResolved {
+		return errAddressHasNotBeenResolved
 	}
-	if startLineNbr == 0 {
-		return errInvalidLine
+	if cmd.resolved.start == 0 {
+		return fmt.Errorf("delete: %w", errorInvalidLine("start line is 0", nil))
 	}
 
-	tempBuffer := deleteLines(startLineNbr, endLineNbr, state)
+	tempBuffer := deleteLines(cmd.resolved.start, cmd.resolved.end, state)
 
 	if tempBuffer.Len() == 0 {
 		return nil
@@ -297,17 +333,17 @@ func (cmd Command) CmdDelete(state *State, addUndo bool) error {
 	// inverse of delete m..n  ist insert at m
 	if addUndo {
 		// special case: we've deleted the last line
-		if startLineNbr > bufferLen {
+		if cmd.resolved.start > bufferLen {
 			// undo of $d is $-1,a
 			state.addUndo(endOfFile, endOfFile, commandAppend, tempBuffer, cmd)
 		} else {
-			state.addUndo(startLineNbr, startLineNbr, commandInsert, tempBuffer, cmd)
+			state.addUndo(cmd.resolved.start, cmd.resolved.start, commandInsert, tempBuffer, cmd)
 		}
 	}
 
 	// set up line nbr and dotline
 
-	newLineNbr := startLineNbr
+	newLineNbr := cmd.resolved.start
 	if bufferLen == 0 {
 		state.dotline = nil
 		state.lineNbr = 0
@@ -345,9 +381,9 @@ func (cmd Command) CmdEdit(state *State) error {
 }
 
 /*
-CmdHelp displays a list of the available commands.
+Help displays a list of the available commands.
 */
-func (cmd Command) CmdHelp(state *State) error {
+func (cmd Command) Help(state *State) error {
 	fmt.Println()
 	fmt.Println(" ", commandAppend, "Appends text after the addressed line.")
 	fmt.Println(" ", commandChange, "Changes lines in the buffer.")
@@ -387,25 +423,20 @@ func (cmd Command) CmdHelp(state *State) error {
 }
 
 /*
-CmdJoin joins the addressed lines, replacing them by a single line containing their joined text.
+Join joins the addressed lines, replacing them by a single line containing their joined text.
 
  If only one address is given, this command does nothing.
 
  If lines are joined, the current address is set to the address of the joined line.
  Else, the current address is unchanged.
 
- Calls internally CmdChange, which is where the undo is handled.
+ Calls internally Change, which is where the undo is handled.
 */
-func (cmd Command) CmdJoin(state *State) error {
-	var startLineNbr, endLineNbr int
+func (cmd Command) Join(state *State) error {
 	var err error
 
-	if !cmd.AddrRange.IsSpecified() {
-		return nil
-	} else {
-		if startLineNbr, endLineNbr, err = cmd.AddrRange.calculateStartAndEndLineNumbers(state.lineNbr, state.Buffer); err != nil {
-			return err
-		}
+	if !cmd.addressIsResolved {
+		return errAddressHasNotBeenResolved
 	}
 	var sb strings.Builder
 	joinFn := func(lineNbr int, el *list.Element, state *State) {
@@ -413,30 +444,30 @@ func (cmd Command) CmdJoin(state *State) error {
 		// replace the newline with a space
 		sb.WriteString(strings.Replace(line, "\n", " ", 1))
 	}
-	iterateLines(startLineNbr, endLineNbr, state, joinFn)
-	// add newline again
-	sb.WriteString("\n")
+	iterateLines(cmd.resolved.start, cmd.resolved.end, state, joinFn)
+	// the last line has had an extra space added; remove this and add newline again
+	joinedLines := sb.String()[0:sb.Len()-1] + "\n"
 
-	changeCommand := Command{cmd.AddrRange, commandChange, cmd.restOfCmd}
-
-	newLines := list.New()
-	newLines.PushBack(Line{sb.String()})
-	changeCommand.CmdChange(state, newLines)
-
-	return nil
-}
-
-/*
-CmdLinenumber prints the line number of the addressed line.
-
- The current address is unchanged.
-*/
-func (cmd Command) CmdLinenumber(state *State) error {
-	startLineNbr, err := cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
+	changeCommand, err := cmd.createNewResolvedCommand(commandChange, cmd.restOfCmd)
 	if err != nil {
 		return err
 	}
-	fmt.Println(startLineNbr)
+	newLines := list.New()
+	newLines.PushBack(Line{joinedLines})
+	err = changeCommand.Change(state, newLines)
+	return err
+}
+
+/*
+Linenumber prints the line number of the addressed line.
+
+ The current address is unchanged.
+*/
+func (cmd Command) Linenumber(state *State) error {
+	if !cmd.addressIsResolved {
+		return errAddressHasNotBeenResolved
+	}
+	fmt.Println(cmd.resolved.start)
 	return nil
 }
 
@@ -454,10 +485,10 @@ func (cmd Command) CmdMark(state *State) error {
 		return errBadMarkname
 	}
 	markName := matches[1]
-	if cmd.AddrRange.end.isSpecified() {
+	if cmd.addrRange.end.isSpecified() {
 		return ErrRangeShouldNotBeSpecified
 	}
-	startLineNbr, err := cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
+	startLineNbr, err := cmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
@@ -467,9 +498,9 @@ func (cmd Command) CmdMark(state *State) error {
 }
 
 /*
-CmdMove moves lines in the buffer.
+Move moves lines in the buffer.
 
- The addressed lines are moved to after the right-hand destination address.
+ The addressed lines are moved to after the right-hand destination address (stored in cmd.restOfCmd).
  The destination address '0' (zero) is valid for this command;
     it moves the addressed lines to the beginning of the buffer.
 
@@ -479,13 +510,13 @@ CmdMove moves lines in the buffer.
 
  Undo is handled by storing the special command 'internalCommandUndoMove'.
 */
-func (cmd Command) CmdMove(state *State) error {
+func (cmd Command) Move(state *State) error {
 	// default is current line (for both start/end, and dest)
-	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state.lineNbr, state.Buffer)
-	if err != nil {
-		return err
+	if !cmd.addressIsResolved {
+		return errAddressHasNotBeenResolved
 	}
 	var destLineNbr int
+	var err error
 	// default is current line for destination
 	destStr := strings.TrimSpace(cmd.restOfCmd)
 	if destStr == "" {
@@ -493,29 +524,33 @@ func (cmd Command) CmdMove(state *State) error {
 	} else {
 		var destLine Address
 		if destLine, err = newAddress(destStr); err != nil {
-			return errInvalidDestinationAddress
+			return errorInvalidDestination(destStr, err)
 		}
 		if destLineNbr, err = destLine.calculateActualLineNumber(state.lineNbr, state.Buffer); err != nil {
-			return err
+			return errorInvalidDestination(destStr, err)
 		}
 	}
-	if startLineNbr == 0 || destLineNbr > state.Buffer.Len() {
-		return errInvalidDestinationAddress
+	startLineNbr := cmd.resolved.start
+	if startLineNbr == 0 {
+		return errorInvalidLine("start line=0", nil)
+	}
+	if destLineNbr > state.Buffer.Len() {
+		return errorInvalidDestination(fmt.Sprintf("dest line: %d > last line: %d", destLineNbr, state.Buffer.Len()), nil)
 	}
 	// it is an error if the destination address falls within the range of moved lines
-	if destLineNbr >= startLineNbr && destLineNbr < endLineNbr {
-		return errInvalidDestinationAddress
+	if destLineNbr >= startLineNbr && destLineNbr < cmd.resolved.end {
+		return errorInvalidDestination(fmt.Sprintf("dest line: %d is in range of moved lines: %d..%d", destLineNbr, startLineNbr, cmd.resolved.end), nil)
 	}
 
 	// delete the lines
-	tempBuffer := deleteLines(startLineNbr, endLineNbr, state)
+	tempBuffer := deleteLines(startLineNbr, cmd.resolved.end, state)
 	if tempBuffer.Len() == 0 {
 		return nil
 	}
 
 	// adjust destination line number if it has been affected by the delete
 	if destLineNbr >= startLineNbr {
-		destLineNbr -= (endLineNbr - startLineNbr + 1)
+		destLineNbr -= (cmd.resolved.end - startLineNbr + 1)
 	}
 
 	appendLines(destLineNbr, state, tempBuffer)
@@ -525,18 +560,19 @@ func (cmd Command) CmdMove(state *State) error {
 }
 
 /*
-CmdPrint prints the addressed lines.
+Print prints the addressed lines.
 
  For command "n": Precedes each line by its line number and a <tab>.
 
  The current address is set to the address of the last line printed.
 */
-func (cmd Command) CmdPrint(state *State) error {
+func (cmd Command) Print(state *State) error {
 	// no address specified defaults to .
-	if !cmd.AddrRange.IsSpecified() {
-		cmd.AddrRange = newValidRange(identDot)
+	// TODO don't think this can occur anymore
+	if !cmd.addrRange.IsSpecified() {
+		cmd.addrRange = newValidRange(identDot)
 	}
-	return _printRange(os.Stdout, cmd, state, cmd.Cmd == commandNumber)
+	return _printRange(os.Stdout, cmd, state, cmd.cmd == commandNumber)
 }
 
 /*
@@ -547,10 +583,10 @@ func (cmd Command) CmdPut(state *State) error {
 	var startLineNbr int
 	var err error
 	// default is append at current line
-	if !cmd.AddrRange.IsSpecified() {
+	if !cmd.addrRange.IsSpecified() {
 		startLineNbr = state.lineNbr
 	} else {
-		if startLineNbr, err = cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer); err != nil {
+		if startLineNbr, err = cmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer); err != nil {
 			return err
 		}
 	}
@@ -581,10 +617,10 @@ func (cmd Command) CmdRead(state *State) error {
 	}
 	var startLineNbr int
 	// default is append at eof
-	if !cmd.AddrRange.IsSpecified() {
+	if !cmd.addrRange.IsSpecified() {
 		startLineNbr = state.Buffer.Len()
 	} else {
-		startLineNbr, err = cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
+		startLineNbr, err = cmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
 		if err != nil {
 			return err
 		}
@@ -616,10 +652,10 @@ CmdScroll scrolls n lines at a time starting at addressed line, and sets window 
 func (cmd Command) CmdScroll(state *State) error {
 	var startLineNbr, endLineNbr int
 	var err error
-	if !cmd.AddrRange.IsSpecified() {
+	if !cmd.addrRange.IsSpecified() {
 		startLineNbr = state.lineNbr + 1
 	} else {
-		startLineNbr, err = cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
+		startLineNbr, err = cmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
 		if err != nil {
 			return err
 		}
@@ -648,19 +684,19 @@ func (cmd Command) CmdScroll(state *State) error {
 	if endAddr, err = newAddress(strconv.Itoa(endLineNbr)); err != nil {
 		return err
 	}
-	cmd.AddrRange = AddressRange{startAddr, endAddr, separatorComma}
+	cmd.addrRange = AddressRange{startAddr, endAddr, separatorComma}
 	return _printRange(os.Stdout, cmd, state, true)
 }
 
 /*
-CmdTransfer copies (i.e., transfers) the addressed lines to after the right-hand destination address.
+Transfer copies (i.e. transfers) the addressed lines to after the right-hand destination address.
 
  If the destination address is 0, the lines are copied at the beginning of the buffer.
 
  The current address is set to the address of the last line copied.
 */
-func (cmd Command) CmdTransfer(state *State) error {
-	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state.lineNbr, state.Buffer)
+func (cmd Command) Transfer(state *State) error {
+	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
@@ -671,14 +707,14 @@ func (cmd Command) CmdTransfer(state *State) error {
 	} else {
 		var destLine Address
 		if destLine, err = newAddress(destStr); err != nil {
-			return errInvalidDestinationAddress
+			return errorInvalidDestination(fmt.Sprintf("transfer: error parsing destination address: %s", destStr), err)
 		}
 		if destLineNbr, err = destLine.calculateActualLineNumber(state.lineNbr, state.Buffer); err != nil {
 			return err
 		}
 	}
 	if destLineNbr > state.Buffer.Len() {
-		return errInvalidDestinationAddress
+		return errorInvalidDestination(fmt.Sprintf("transfer: destLine: %d > max line: %d", destLineNbr, state.Buffer.Len()), nil)
 	}
 	tempBuffer := copyLines(startLineNbr, endLineNbr, state)
 	appendLines(destLineNbr, state, tempBuffer)
@@ -709,7 +745,7 @@ func (cmd Command) CmdUndo(state *State) error {
 	state.processingUndo = true
 	var err error
 	// cater for the 'special' undo commands
-	switch undo.cmd.Cmd {
+	switch undo.cmd.cmd {
 	case internalCommandUndoMove:
 		err = handleUndoMove(undo, state)
 	case internalCommandUndoSubst:
@@ -746,18 +782,18 @@ func (cmd Command) CmdWrite(state *State) error {
 	}
 
 	var startLineNbr, endLineNbr int
-	if !cmd.AddrRange.IsSpecified() {
+	if !cmd.addrRange.IsSpecified() {
 		startLineNbr = 1
 		endLineNbr = state.Buffer.Len()
 	} else {
-		startLineNbr, endLineNbr, err = cmd.AddrRange.calculateStartAndEndLineNumbers(state.lineNbr, state.Buffer)
+		startLineNbr, endLineNbr, err = cmd.addrRange.calculateStartAndEndLineNumbers(state.lineNbr, state.Buffer)
 		if err != nil {
 			return err
 		}
 	}
 	// disallow 0
 	if startLineNbr == 0 {
-		return errInvalidLine
+		return fmt.Errorf("write: %w", errorInvalidLine("start line is 0", nil))
 	}
 	moveToLine(startLineNbr, state)
 	nbrBytesWritten, err := WriteFile(filename, state.dotline, startLineNbr, endLineNbr)
@@ -778,12 +814,12 @@ CmdYank copies (yanks) the addressed lines to the cut buffer.
 */
 func (cmd Command) CmdYank(state *State) error {
 	currentAddress := state.lineNbr // save for later
-	startLineNbr, endLineNbr, err := cmd.AddrRange.getAddressRange(state.lineNbr, state.Buffer)
+	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
 	if startLineNbr == 0 {
-		return errInvalidLine
+		return fmt.Errorf("yank: %w", errorInvalidLine("start line is 0", nil))
 	}
 
 	state.CutBuffer = copyLines(startLineNbr, endLineNbr, state)
@@ -806,18 +842,18 @@ func (cmd Command) CmdYank(state *State) error {
 */
 func handleUndoMove(undoCmd Undo, state *State) error {
 	// first the delete...
-	undoStartLine, err := undoCmd.cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
+	undoStartLine, err := undoCmd.cmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
-	undoEndLine, err := undoCmd.cmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
+	undoEndLine, err := undoCmd.cmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
 	_ = deleteLines(undoStartLine, undoEndLine, state)
 
 	// ...then the append. The line to append at is stored in the original command
-	originalStartLine, err := undoCmd.originalCmd.AddrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
+	originalStartLine, err := undoCmd.originalCmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
 	if err != nil {
 		return err
 	}
@@ -834,10 +870,10 @@ func handleUndoSubst(toplevelUndoCmd Undo, state *State) error {
 	// undo.text == a list of 'change' undo-commands, NOT a list of changed lines
 	for el := toplevelUndoCmd.text.Front(); el != nil; el = el.Next() {
 		undoCmd := el.Value.(Undo)
-		if undoCmd.cmd.Cmd != commandChange {
-			panic(fmt.Sprintf("expected 'change' command, got '%s'\n", undoCmd.cmd.Cmd))
+		if undoCmd.cmd.cmd != commandChange {
+			panic(fmt.Sprintf("expected 'change' command, got '%s'\n", undoCmd.cmd.cmd))
 		}
-		undoCmd.cmd.CmdChange(state, undoCmd.text)
+		undoCmd.cmd.Change(state, undoCmd.text)
 	}
 	return nil
 }
@@ -965,26 +1001,28 @@ func getFilename(potentialFilename string, state *State, setDefault bool) (filen
 }
 
 func _printRange(writer io.Writer, cmd Command, state *State, printLineNumbers bool) error {
-	startLineNbr, endLineNbr, err := cmd.AddrRange.calculateStartAndEndLineNumbers(state.lineNbr, state.Buffer)
-	if err != nil {
-		return err
-	}
-	// disallow 0p
-	if startLineNbr == 0 {
-		return errInvalidLine
-	}
-	if endLineNbr == 0 {
-		endLineNbr = 1
+	if !cmd.addressIsResolved {
+		return fmt.Errorf("address has not been resolved")
 	}
 
+	// disallow 0p
+	if cmd.resolved.start == 0 {
+		return fmt.Errorf("print: %w", errorInvalidLine("start line is 0", nil))
+	}
+	if cmd.resolved.end == 0 {
+		cmd.resolved.end = 1
+	}
+
+	/* already checked
 	if startLineNbr > endLineNbr {
 		panic(fmt.Sprintf("start line: %d, end line %d", startLineNbr, endLineNbr))
 	}
-	moveToLine(startLineNbr, state)
+	*/
+	moveToLine(cmd.resolved.start, state)
 
 	el := state.dotline
 	prevEl := el
-	for lineNbr := startLineNbr; lineNbr <= endLineNbr; lineNbr++ {
+	for lineNbr := cmd.resolved.start; lineNbr <= cmd.resolved.end; lineNbr++ {
 		_printLine(writer, lineNbr, el.Value.(Line).Line, printLineNumbers)
 		prevEl = el // store el, to be able to set dotline i/c we hit the end of the list
 		el = el.Next()
@@ -995,7 +1033,7 @@ func _printRange(writer io.Writer, cmd Command, state *State, printLineNumbers b
 	} else {
 		state.dotline = prevEl
 	}
-	state.lineNbr = endLineNbr
+	state.lineNbr = cmd.resolved.end
 	return nil
 }
 
@@ -1043,7 +1081,7 @@ func moveToLine(requiredLine int, state *State) {
 func (cmd Command) ProcessCommand(state *State, enteredText *list.List, inGlobalCommand bool) (quit bool, err error) {
 	// following commands are not allowed whilst procesing a global "g" command
 	if inGlobalCommand {
-		switch cmd.Cmd {
+		switch cmd.cmd {
 		case commandEdit, commandEditUnconditionally,
 			commandGlobal, commandGlobalInteractive,
 			commandInverseGlobal, commandInverseGlobalInteractive,
@@ -1056,25 +1094,32 @@ func (cmd Command) ProcessCommand(state *State, enteredText *list.List, inGlobal
 		}
 	}
 	// check for commands which cannot take ranges
-	switch cmd.Cmd {
+	switch cmd.cmd {
 	case commandEdit, commandEditUnconditionally,
 		commandFilename, commandHelp, commandPrompt,
 		commandQuit, commandQuitUnconditionally,
 		commandUndo:
-		if cmd.AddrRange.IsSpecified() {
+		if cmd.addrRange.IsSpecified() {
 			err = ErrRangeShouldNotBeSpecified
 		}
 	default:
 		//ok
 	}
 
-	switch cmd.Cmd {
+	// first, resolve addresses
+	if !cmd.addressIsResolved {
+		if err = cmd.resolveAddress(state); err != nil {
+			return false, err
+		}
+	}
+
+	switch cmd.cmd {
 	case commandAppend, commandInsert:
-		err = cmd.CmdAppendInsert(state, enteredText)
+		err = cmd.AppendInsert(state, enteredText)
 	case commandChange:
-		err = cmd.CmdChange(state, enteredText)
+		err = cmd.Change(state, enteredText)
 	case commandDelete:
-		err = cmd.CmdDelete(state, true)
+		err = cmd.Delete(state, true)
 	case commandEdit:
 		if state.changedSinceLastWrite {
 			fmt.Println(unsavedChanges)
@@ -1090,25 +1135,25 @@ func (cmd Command) ProcessCommand(state *State, enteredText *list.List, inGlobal
 	case commandGlobalInteractive:
 		fmt.Println("not yet implemented")
 	case commandHelp:
-		err = cmd.CmdHelp(state)
+		err = cmd.Help(state)
 	case commandInverseGlobal:
 		fmt.Println("not yet implemented")
 	case commandInverseGlobalInteractive:
 		fmt.Println("not yet implemented")
 	case commandJoin:
-		err = cmd.CmdJoin(state)
+		err = cmd.Join(state)
 	case commandMark:
 		err = cmd.CmdMark(state)
 	case commandList:
 		fmt.Println("not yet implemented")
 	case commandMove:
-		err = cmd.CmdMove(state)
+		err = cmd.Move(state)
 	case commandNumber, commandPrint:
-		err = cmd.CmdPrint(state)
+		err = cmd.Print(state)
 	case commandPrompt:
 		state.ShowPrompt = !state.ShowPrompt
 	case commandQuit, commandQuitUnconditionally:
-		if cmd.Cmd == commandQuit && state.changedSinceLastWrite {
+		if cmd.cmd == commandQuit && state.changedSinceLastWrite {
 			fmt.Println(unsavedChanges)
 		} else {
 			quit = true
@@ -1118,12 +1163,12 @@ func (cmd Command) ProcessCommand(state *State, enteredText *list.List, inGlobal
 	case commandSubstitute:
 		err = cmd.CmdSubstitute(state)
 	case commandTransfer:
-		err = cmd.CmdTransfer(state)
+		err = cmd.Transfer(state)
 	case commandUndo:
 		err = cmd.CmdUndo(state)
 	case commandWrite:
 		err = cmd.CmdWrite(state)
-		quit = (cmd.Cmd == commandWrite && strings.HasPrefix(cmd.restOfCmd, commandQuit))
+		quit = (cmd.cmd == commandWrite && strings.HasPrefix(cmd.restOfCmd, commandQuit))
 	case commandWriteAppend:
 		fmt.Println("not yet implemented")
 	case commandPut:
@@ -1133,13 +1178,13 @@ func (cmd Command) ProcessCommand(state *State, enteredText *list.List, inGlobal
 	case commandScroll:
 		err = cmd.CmdScroll(state)
 	case commandComment:
-		err = cmd.CmdComment(state)
+		err = cmd.Comment(state)
 	case commandLinenumber:
-		err = cmd.CmdLinenumber(state)
+		err = cmd.Linenumber(state)
 	case commandNoCommand:
 		// nothing entered -- ignore
 	default:
-		fmt.Println("ERROR got command not in switch!?: ", cmd.Cmd)
+		fmt.Println("ERROR got command not in switch!?: ", cmd.cmd)
 	}
 	return quit, err
 }

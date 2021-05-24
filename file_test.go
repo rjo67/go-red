@@ -55,14 +55,6 @@ func TestStringWriter(t *testing.T) {
 	createWriterAndDoTest(t, listOfLines)
 }
 
-func createListOfLines(lines []string) *list.List {
-	listOfLines := list.New()
-	for _, line := range lines {
-		listOfLines.PushBack(Line{line + "\n"})
-	}
-	return listOfLines
-}
-
 /* --------------------  helper routines ---------------- */
 
 func doReadTestWithFile(t *testing.T, data testdata, filename string) {
@@ -132,7 +124,6 @@ func createWriterAndDoTest(t *testing.T, listOfLines *list.List) {
 }
 
 func doWriteTest(t *testing.T, myList *list.List, writer *bufio.Writer) (nbrBytesWritten int) {
-
 	nbrBytesWritten, err := WriteWriter(writer, myList.Front(), 1, myList.Len())
 	if err != nil {
 		t.Fatalf("Got error %v", err)
