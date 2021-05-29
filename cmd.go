@@ -112,7 +112,7 @@ func (cmd *Command) createNewResolvedCommand(newCmdIdent, newRestOfCmd string) (
 /*
 ParseCommand parses the given string and creates a Command object.
 */
-func ParseCommand(str string) (cmd Command, err error) {
+func ParseCommand(str string, debug bool) (cmd Command, err error) {
 	if strings.TrimSpace(str) == "" {
 		// newline alone == +1p
 		addrRange, err := newRange("+1")
@@ -143,7 +143,9 @@ func ParseCommand(str string) (cmd Command, err error) {
 		cmdString := matches[2]
 		restOfCmd := matches[3]
 
-		//fmt.Printf("addr: '%s', cmd: '%s', rest: '%s'\n", addrString, cmdString, restOfCmd)
+		if debug {
+			fmt.Printf("parsed addrString: '%s', cmd: '%s', rest: '%s'\n", addrString, cmdString, restOfCmd)
+		}
 		addrRange, err := newRange(addrString)
 		if err != nil {
 			return Command{}, err
@@ -359,7 +361,7 @@ func (cmd Command) Delete(state *State, addUndo bool) error {
 }
 
 /*
-CmdEdit edits file, and sets the default filename.
+CmdEdit reads in a file, and sets the default filename.
   If file is not specified, then the default filename is used.
   Any lines in the buffer are deleted before the new file is read.
   The current address is set to the address of the last line in the buffer.
@@ -536,20 +538,28 @@ func (cmd Command) Print(state *State) error {
 }
 
 /*
-CmdPut copies (puts) the contents of the cut buffer to after the addressed line.
+Put copies (puts) the contents of the cut buffer to after the addressed line.
+If no address was specified, defaults to ".".
  The current address is set to the address of the last line copied.
 */
-func (cmd Command) CmdPut(state *State) error {
-	var startLineNbr int
-	var err error
-	// default is append at current line
-	if !cmd.addrRange.IsSpecified() {
-		startLineNbr = state.lineNbr
-	} else {
-		if startLineNbr, err = cmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer); err != nil {
-			return err
-		}
+func (cmd Command) Put(state *State) error {
+	if !cmd.addressIsResolved {
+		return errAddressHasNotBeenResolved
 	}
+	if cmd.resolved.start == 0 {
+		return fmt.Errorf("put: %w", errorInvalidLine("start line is 0", nil))
+	}
+	// range not allowed
+	if cmd.resolved.start != cmd.resolved.end {
+		return fmt.Errorf("put: %w", ErrRangeShouldNotBeSpecified)
+	}
+
+	startLineNbr := cmd.resolved.start
+	// default is append at current line, 'override' cmd.resolved.start if necessary
+	if cmd.addrRange.start.isNotSpecified() {
+		startLineNbr = state.lineNbr
+	}
+
 	nbrLines := state.CutBuffer.Len()
 	if nbrLines > 0 {
 		appendLines(startLineNbr, state, state.CutBuffer)
@@ -772,17 +782,16 @@ CmdYank copies (yanks) the addressed lines to the cut buffer.
  The cut buffer is overwritten by subsequent 'c', 'd', 'j', 's', or 'y' commands.
  The current address is unchanged.
 */
-func (cmd Command) CmdYank(state *State) error {
-	currentAddress := state.lineNbr // save for later
-	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state.lineNbr, state.Buffer)
-	if err != nil {
-		return err
+func (cmd Command) Yank(state *State) error {
+	if !cmd.addressIsResolved {
+		return errAddressHasNotBeenResolved
 	}
-	if startLineNbr == 0 {
+	if cmd.resolved.start == 0 {
 		return fmt.Errorf("yank: %w", errorInvalidLine("start line is 0", nil))
 	}
+	currentAddress := state.lineNbr // save for later
 
-	state.CutBuffer = copyLines(startLineNbr, endLineNbr, state)
+	state.CutBuffer = copyLines(cmd.resolved.start, cmd.resolved.end, state)
 	moveToLine(currentAddress, state)
 	return nil
 }
@@ -1132,9 +1141,9 @@ func (cmd Command) ProcessCommand(state *State, enteredText *list.List, inGlobal
 	case commandWriteAppend:
 		fmt.Println("not yet implemented")
 	case commandPut:
-		err = cmd.CmdPut(state)
+		err = cmd.Put(state)
 	case commandYank:
-		err = cmd.CmdYank(state)
+		err = cmd.Yank(state)
 	case commandScroll:
 		err = cmd.CmdScroll(state)
 	case commandComment:

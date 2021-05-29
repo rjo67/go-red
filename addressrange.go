@@ -64,28 +64,25 @@ func (ra *AddressRange) calculateStartAndEndLineNumbers(currentLineNbr int, buff
 	if ra.start.isNotSpecified() {
 		switch ra.separator {
 		case separatorComma:
-			if ra.start, err = newAddress("1"); err != nil {
-				return -1, -1, err
-			}
+			startLine = 1
 		case separatorSemicolon:
-			if ra.start, err = newAddress(identDot); err != nil {
-				return -1, -1, err
-			}
+			startLine = currentLineNbr
+		}
+	} else {
+		if startLine, err = ra.start.calculateActualLineNumber(currentLineNbr, buffer); err != nil {
+			return -1, -1, errInvalidStartOfRange
 		}
 	}
+
 	// special case 2) first address given, second empty -> {<given address>, <given address>}
 	if ra.end.isNotSpecified() {
-		ra.end = ra.start
+		endLine = startLine
+	} else {
+		if endLine, err = ra.end.calculateActualLineNumber(currentLineNbr, buffer); err != nil {
+			return -1, -1, errInvalidEndOfRange
+		}
 	}
 
-	startLine, err = ra.start.calculateActualLineNumber(currentLineNbr, buffer)
-	if err != nil {
-		return -1, -1, errInvalidStartOfRange
-	}
-	endLine, err = ra.end.calculateActualLineNumber(currentLineNbr, buffer)
-	if err != nil {
-		return -1, -1, errInvalidEndOfRange
-	}
 	// start must be before end ('special' values excluded)
 	if startLine >= 0 && endLine >= 0 && startLine > endLine {
 		return -1, -1, errBadRange
@@ -172,11 +169,11 @@ func newRange(rangeStr string) (AddressRange, error) {
 
 	start, err := newAddress(matches[firstAddressCaptureGroup])
 	if err != nil {
-		return addrRange, err
+		return addrRange, fmt.Errorf("cannot parse address 1: %s", err.Error())
 	}
 	end, err := newAddress(matches[secondAddressCaptureGroup])
 	if err != nil {
-		return addrRange, err
+		return addrRange, fmt.Errorf("cannot parse address 2: %s", err.Error())
 	}
 	separator := matches[separatorCaptureGroup]
 

@@ -196,7 +196,7 @@ func TestPrintRange(t *testing.T) {
 
 	buff.Reset()
 	// currently at line 3
-	if cmd, err = ParseCommand("+1"); err != nil {
+	if cmd, err = ParseCommand("+1", false); err != nil {
 		t.Fatalf("error %s", err)
 	}
 	if err = cmd.resolveAddress(state); err != nil {
@@ -207,6 +207,48 @@ func TestPrintRange(t *testing.T) {
 	}
 	if buff.String() != "4\n" {
 		t.Fatalf("+1 returned '%s'", buff.String())
+	}
+}
+
+func TestPut(t *testing.T) {
+	data := []struct {
+		addrRange        string
+		expectedContents string
+		expectedLineNbr  int
+	}{
+		{"1", "1\nsome\nnew\nlines\n2\n3\n4\n5\n", 4},
+		{"5", "1\n2\n3\n4\n5\nsome\nnew\nlines\n", 8},
+		{".", "1\n2\nsome\nnew\nlines\n3\n4\n5\n", 5},
+		{"", "1\n2\nsome\nnew\nlines\n3\n4\n5\n", 5}, // default is "."
+	}
+
+	var state *State
+	var err error
+	var cmd Command
+	for i, test := range data {
+		t.Run(fmt.Sprintf("test %d: >>%s<<", i, test.addrRange), func(t *testing.T) {
+			state = resetState([]string{"1", "2", "3", "4", "5"})
+			state.lineNbr = 2 // necessary for some tests
+			state.CutBuffer = createListOfLines([]string{"some", "new", "lines"})
+			if cmd, err = createCommandAndResolveAddressRange(state, newValidRange(test.addrRange), commandPut, ""); err != nil {
+				t.Fatalf("error: %s", err)
+			}
+			if err = cmd.Put(state); err != nil {
+				t.Fatalf("error: %s", err)
+			}
+			assertInt(t, "wrong state.lineNbr!", state.lineNbr, test.expectedLineNbr)
+			assertBufferContents(t, state.Buffer, test.expectedContents)
+		})
+	}
+
+	// an error if range specified
+	if cmd, err = createCommandAndResolveAddressRange(state, newValidRange("2,+3"), commandPut, ""); err != nil {
+		t.Fatalf("error: %s", err)
+	}
+	if err = cmd.Put(state); err != nil {
+		// ok
+	} else {
+		t.Fatalf("error: expected error because range specified")
 	}
 }
 
@@ -238,6 +280,37 @@ func TestTransfer(t *testing.T) {
 			}
 			assertInt(t, "wrong state.lineNbr!", state.lineNbr, test.expectedLineNbr)
 			assertBufferContents(t, state.Buffer, test.expectedContents)
+		})
+	}
+}
+
+func TestYank(t *testing.T) {
+	data := []struct {
+		addrRange                   string
+		expectedContentsOfCutBuffer string
+		expectedLineNbr             int
+	}{
+		{"2,+3" /*start line is 2*/, "2\n3\n4\n5\n", 2},
+		{"1", "1\n", 2},
+		{"1,2", "1\n2\n", 2},
+		{"5", "5\n", 2},
+		{"1,$", "1\n2\n3\n4\n5\n", 2}, // yank whole file
+	}
+
+	for i, test := range data {
+		t.Run(fmt.Sprintf("test %d: >>%s<<", i, test.addrRange), func(t *testing.T) {
+			var err error
+			var cmd Command
+			state := resetState([]string{"1", "2", "3", "4", "5"})
+			state.lineNbr = 2 // necessary for some tests
+			if cmd, err = createCommandAndResolveAddressRange(state, newValidRange(test.addrRange), commandYank, ""); err != nil {
+				t.Fatalf("error: %s", err)
+			}
+			if err = cmd.Yank(state); err != nil {
+				t.Fatalf("error: %s", err)
+			}
+			assertInt(t, "wrong state.lineNbr!", state.lineNbr, test.expectedLineNbr)
+			assertBufferContents(t, state.CutBuffer, test.expectedContentsOfCutBuffer)
 		})
 	}
 }

@@ -31,15 +31,12 @@ func main() {
 	flag.Parse()
 
 	stop := false
+	var startfile string
 	if flag.NArg() > 1 {
 		fmt.Printf("unexpected arguments. See usage")
 		stop = true
 	} else if flag.NArg() == 1 {
-		err := readInputFile(flag.Arg(0), state)
-		if err != nil {
-			fmt.Printf("error: %s\n", err.Error())
-			stop = true
-		}
+		startfile = flag.Arg(0)
 	}
 	if !stop {
 		if state.Prompt == "" {
@@ -50,6 +47,17 @@ func main() {
 		state.WindowSize = 15 // see https://stackoverflow.com/a/48610796 for a better way...
 
 		fmt.Printf("*** %s (v%s)\n", NAME, VERSION)
+	}
+	if !stop {
+		// read in start file if specified
+		if startfile != "" {
+			if err := readInputFile(startfile, state); err != nil {
+				fmt.Printf("error: %s\n", err.Error())
+				stop = true
+			}
+		}
+	}
+	if !stop {
 		mainloop(state, bufio.NewReader(os.Stdin))
 	}
 }
@@ -60,7 +68,7 @@ Reads the given file into 'state'.
 func readInputFile(filename string, state *red.State) error {
 	// read in file
 	editCommandStr := "e " + filename
-	cmd, err := red.ParseCommand(editCommandStr)
+	cmd, err := red.ParseCommand(editCommandStr, state.Debug)
 	if err != nil {
 		return fmt.Errorf("could not parse command %s", editCommandStr)
 	} else {
@@ -90,7 +98,7 @@ func mainloop(state *red.State, reader *bufio.Reader) {
 				fmt.Printf("error: %s", err)
 			}
 		} else {
-			cmd, err := red.ParseCommand(cmdStr)
+			cmd, err := red.ParseCommand(cmdStr, state.Debug)
 			if err != nil {
 				fmt.Printf("? %s\n", err)
 			} else {
