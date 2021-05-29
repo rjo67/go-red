@@ -330,6 +330,8 @@ func (cmd Command) Delete(state *State, addUndo bool) error {
 	state.changedSinceLastWrite = true
 	bufferLen := state.Buffer.Len()
 
+	state.updateMarks(commandDelete, cmd.resolved.start, cmd.resolved.end, -1)
+
 	// inverse of delete m..n  ist insert at m
 	if addUndo {
 		// special case: we've deleted the last line
@@ -430,14 +432,17 @@ func (cmd Command) Linenumber(state *State) error {
 }
 
 /*
-CmdMark marks the given line.
+Mark marks the given line.
 
 Name of the mark must be one char (a..z)
  It is an error if an address range is specified.
 
  The current address is unchanged.
 */
-func (cmd Command) CmdMark(state *State) error {
+func (cmd Command) Mark(state *State) error {
+	if !cmd.addressIsResolved {
+		return errAddressHasNotBeenResolved
+	}
 	matches := singleLetterRE.FindStringSubmatch(strings.TrimSpace(cmd.restOfCmd))
 	if matches == nil {
 		return errBadMarkname
@@ -446,12 +451,7 @@ func (cmd Command) CmdMark(state *State) error {
 	if cmd.addrRange.end.isSpecified() {
 		return ErrRangeShouldNotBeSpecified
 	}
-	startLineNbr, err := cmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
-	if err != nil {
-		return err
-	}
-	el := _findLine(startLineNbr, state.Buffer)
-	state.addMark(Mark{line: el, name: markName})
+	state.addMark(Mark{name: markName, lineNbr: cmd.resolved.start})
 	return nil
 }
 
@@ -505,6 +505,8 @@ func (cmd Command) Move(state *State) error {
 	if tempBuffer.Len() == 0 {
 		return nil
 	}
+
+	state.updateMarks(commandMove, startLineNbr, cmd.resolved.end, destLineNbr)
 
 	// adjust destination line number if it has been affected by the delete
 	if destLineNbr >= startLineNbr {
@@ -1101,7 +1103,7 @@ func (cmd Command) ProcessCommand(state *State, enteredText *list.List, inGlobal
 	case commandJoin:
 		err = cmd.Join(state)
 	case commandMark:
-		err = cmd.CmdMark(state)
+		err = cmd.Mark(state)
 	case commandList:
 		fmt.Println("not yet implemented")
 	case commandMove:
