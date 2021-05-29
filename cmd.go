@@ -381,48 +381,6 @@ func (cmd Command) CmdEdit(state *State) error {
 }
 
 /*
-Help displays a list of the available commands.
-*/
-func (cmd Command) Help(state *State) error {
-	fmt.Println()
-	fmt.Println(" ", commandAppend, "Appends text after the addressed line.")
-	fmt.Println(" ", commandChange, "Changes lines in the buffer.")
-	fmt.Println(" ", commandDelete, "Deletes the addressed lines from the buffer.")
-	fmt.Println(" ", commandEdit, "Edits file, and sets the default filename.")
-	fmt.Println(" ", commandEditUnconditionally, "Edits file regardless of any changes in current buffer.")
-	fmt.Println(" ", commandFilename, "Sets the default filename.")
-	fmt.Println(" ", commandGlobal, "Executes the command-list for all matching lines.")
-	fmt.Println(" ", commandGlobalInteractive, "Interactive 'global'.")
-	fmt.Println(" ", commandHelp, "Displays this help.")
-	fmt.Println(" ", commandInsert, "Inserts text before the addressed line.")
-	fmt.Println(" ", commandJoin, "Joins the addressed lines, replacing them by a single line containing the joined text.")
-	fmt.Println(" ", commandMark, "Marks the current line.")
-	fmt.Println(" ", commandList, "Display the addressed lines.")
-	fmt.Println(" ", commandMove, "Moves lines in the buffer.")
-	fmt.Println(" ", commandNumber, "Displays the addressed lines with line numbers.")
-	fmt.Println(" ", commandPrint, "Prints the addressed lines.")
-	fmt.Println(" ", commandPrompt, "Sets the prompt.")
-	fmt.Println(" ", commandQuit, "Quits the editor.")
-	fmt.Println(" ", commandQuitUnconditionally, "Quits the editor without saving changes.")
-	fmt.Println(" ", commandRead, "Reads file and appends it after the addressed line.")
-	fmt.Println(" ", commandSubstitute, "Replaces text in the addressed lines matching a regular expression.")
-	fmt.Println(" ", commandTransfer, "Copies (transfers) the addressed lines to after the right-hand destination address.")
-	fmt.Println(" ", commandUndo, "Undoes the previous command.")
-	fmt.Println(" ", commandInverseGlobal, "As 'global' but acts on all lines NOT matching the regex.")
-	fmt.Println(" ", commandInverseGlobalInteractive, "Interactive 'inverse-global'.")
-	fmt.Println(" ", commandWrite, "Writes the addressed lines to a file.")
-	fmt.Println(" ", commandWriteAppend, "Appends the addressed lines to a file.")
-	fmt.Println(" ", commandPut, "Copies (puts) the contents of the cut-buffer to after the addressed line.")
-	fmt.Println(" ", commandYank, "Copies (yanks) the addressed lines to the cut-buffer.")
-	fmt.Println(" ", commandScroll, "Scrolls n lines starting at the addressed line.")
-	fmt.Println(" ", commandComment, "Comment -- rest of line will be ignored.")
-	fmt.Println(" ", commandLinenumber, "Prints the line number of the addressed line.")
-	fmt.Println()
-
-	return nil
-}
-
-/*
 Join joins the addressed lines, replacing them by a single line containing their joined text.
 
  If only one address is given, this command does nothing.
