@@ -163,6 +163,7 @@ func TestParseValidCommands(t *testing.T) {
 	}{
 		{"", "+1", "p", ""},
 		{"p", "", "p", ""},
+		{"e bigfile.txt", "", "e", "bigfile.txt"},
 		{"+1", "+1", "p", ""},
 		{"1,2d", "1,2", "d", ""},
 		{"'a,5y", "'a,5", "y", ""},

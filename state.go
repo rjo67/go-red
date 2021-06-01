@@ -15,18 +15,18 @@ State stores the global state.
 */
 type State struct {
 	// the last line number is accessible via buffer.Len()
-	Buffer                *list.List      // the current buffer -- should never be null
-	CutBuffer             *list.List      // the cut buffer, set by commands c, d, j, s or y
-	dotline               *list.Element   // the current (dot) line -- can be null
-	marks                 map[string]Mark // file marks
-	lineNbr               int             // the current line number
-	lastSubstRE           *regexp.Regexp  // the previous substitution regexp
-	lastSubstReplacement  string          // the previous substitution replacement string
-	lastSubstSuffixes     string          // the previous substitution suffixes
-	lastSearchRE          *regexp.Regexp  // the previous search regexp
-	undo                  *list.List      // list of commands to undo
-	processingUndo        bool            // if currently processing an undo (therefore don't add undo commands)
-	changedSinceLastWrite bool            // whether the buffer has been changed since the last write
+	Buffer                *list.List     // the current buffer -- should never be null
+	CutBuffer             *list.List     // the cut buffer, set by commands c, d, j, s or y
+	dotline               *list.Element  // the current (dot) line -- can be null
+	marks                 map[string]int // file marks
+	lineNbr               int            // the current line number
+	lastSubstRE           *regexp.Regexp // the previous substitution regexp
+	lastSubstReplacement  string         // the previous substitution replacement string
+	lastSubstSuffixes     string         // the previous substitution suffixes
+	lastSearchRE          *regexp.Regexp // the previous search regexp
+	undo                  *list.List     // list of commands to undo
+	processingUndo        bool           // if currently processing an undo (therefore don't add undo commands)
+	changedSinceLastWrite bool           // whether the buffer has been changed since the last write
 	ProgramFlags
 }
 
@@ -56,7 +56,7 @@ func NewState() *State {
 	state := State{}
 	state.Buffer = list.New()
 	state.CutBuffer = list.New()
-	state.marks = make(map[string]Mark)
+	state.marks = make(map[string]int)
 	state.undo = list.New()
 	state.Prompt = ":" // default prompt
 

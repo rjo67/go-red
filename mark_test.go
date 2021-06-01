@@ -58,12 +58,12 @@ func TestLineDeletion(t *testing.T) {
 
 	// delete line 1 :   a->1, b->3
 	_delete(t, state, "1")
-	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"].lineNbr, 1)
-	assertInt(t, "mark 'b' not pointing at correct line.", state.marks["b"].lineNbr, 3)
+	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"], 1)
+	assertInt(t, "mark 'b' not pointing at correct line.", state.marks["b"], 3)
 
 	// delete line 3 :   a->1
 	_delete(t, state, "3")
-	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"].lineNbr, 1)
+	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"], 1)
 	if elem, ok := state.marks["b"]; ok != false {
 		t.Fatalf("mark 'b' should not exist, but got: %v", elem)
 	}
@@ -75,19 +75,19 @@ func TestLineMoveFromBelow(t *testing.T) {
 
 	// no-op
 	_move(t, state, "1", "2")
-	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"].lineNbr, 3)
+	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"], 3)
 	_move(t, state, "1", "3")
-	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"].lineNbr, 2)
+	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"], 2)
 
 	state = resetState([]string{"a", "b", "c", "d", "e", "f"})
 	_addMark(t, state, "3", "a")
 	_move(t, state, "2", "4")
-	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"].lineNbr, 2)
+	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"], 2)
 
 	state = resetState([]string{"a", "b", "c", "d", "e", "f"})
 	_addMark(t, state, "3", "a")
 	_move(t, state, "1,2", "4")
-	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"].lineNbr, 1)
+	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"], 1)
 
 	state = resetState([]string{"a", "b", "c", "d", "e", "f"})
 	_addMark(t, state, "2", "a")
@@ -96,8 +96,8 @@ func TestLineMoveFromBelow(t *testing.T) {
 	_move(t, state, "1,2", "4")
 	// {"c", "d", "a", "b", "e", "f"})
 	assertElementDoesNotExist(t, state.marks, "a")
-	assertInt(t, "mark 'b' not pointing at correct line.", state.marks["b"].lineNbr, 2)
-	assertInt(t, "mark 'c' not pointing at correct line.", state.marks["c"].lineNbr, 5)
+	assertInt(t, "mark 'b' not pointing at correct line.", state.marks["b"], 2)
+	assertInt(t, "mark 'c' not pointing at correct line.", state.marks["c"], 5)
 }
 
 func TestLineMoveFromAbove(t *testing.T) {
@@ -106,15 +106,15 @@ func TestLineMoveFromAbove(t *testing.T) {
 
 	// no-op
 	_move(t, state, "3", "4")
-	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"].lineNbr, 2)
+	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"], 2)
 
 	_move(t, state, "3", "1")
-	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"].lineNbr, 3)
+	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"], 3)
 
 	state = resetState([]string{"a", "b", "c", "d", "e", "f"})
 	_addMark(t, state, "3", "a")
 	_move(t, state, "4,6", "2")
-	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"].lineNbr, 6)
+	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"], 6)
 
 	state = resetState([]string{"a", "b", "c", "d", "e", "f", "g"})
 	_addMark(t, state, "2", "a")
@@ -123,13 +123,13 @@ func TestLineMoveFromAbove(t *testing.T) {
 	_addMark(t, state, "7", "d") // above moved lines
 	_move(t, state, "5,6", "3")
 	// {"a", "b", "c", "e", "f", "d"})
-	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"].lineNbr, 2)
-	assertInt(t, "mark 'b' not pointing at correct line.", state.marks["b"].lineNbr, 3)
+	assertInt(t, "mark 'a' not pointing at correct line.", state.marks["a"], 2)
+	assertInt(t, "mark 'b' not pointing at correct line.", state.marks["b"], 3)
 	assertElementDoesNotExist(t, state.marks, "c")
-	assertInt(t, "mark 'd' not pointing at correct line.", state.marks["d"].lineNbr, 7)
+	assertInt(t, "mark 'd' not pointing at correct line.", state.marks["d"], 7)
 }
 
-func assertElementDoesNotExist(t *testing.T, marks map[string]Mark, key string) {
+func assertElementDoesNotExist(t *testing.T, marks map[string]int, key string) {
 	if elem, ok := marks[key]; ok != false {
 		t.Fatalf("mark '%s' should not exist, but got: %v", key, elem)
 	}

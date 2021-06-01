@@ -479,7 +479,7 @@ func (cmd Command) Mark(state *State) error {
 	if cmd.addrRange.end.isSpecified() {
 		return ErrRangeMayNotBeSpecified
 	}
-	state.addMark(Mark{name: markName, lineNbr: cmd.resolved.start})
+	state.addMark(markName, cmd.resolved.start)
 	return nil
 }
 
