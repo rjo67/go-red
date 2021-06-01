@@ -64,10 +64,21 @@ var (
 	errAddressHasNotBeenResolved error = errors.New("address has not been resolved")
 )
 
+const (
+	_simplifiedAddressRE = `([+-]?\d+|[\.\$\+-]|'[a-z]|\/[^\/]*\/|\?[^\?]*\?|\s*)+`
+	_commandRE           = `[acdeEfgGhijklmnpPqQrstuvVwWxyz#=]`
+)
+
 var (
 	singleLetterRE = regexp.MustCompile(`^([a-z])$`)
-	justNumberRE   = regexp.MustCompile(`^\s*(\d+)\s*$`)
-	commandLineRE  = regexp.MustCompile("(.*?)([acdeEfgGhijklmnpPqQrstuvVwWxyz#=])(.*)")
+	// This RE matches user input of the form addr1 sep addr2 cmd (everything is optional, whitespace allowed anywhere)
+	// The group 'addrRange' will contain addr1 sep addr2.
+	// The group 'cmd' will contain everything else (note: a command is optional)
+	// In case of syntax errors (e.g. nonterminated regex, mark followed by number), the 'cmd' group will contain the string starting at the error
+	commandLineRE = regexp.MustCompile(
+		"^(?P<addrRange>" + _simplifiedAddressRE +
+			"[,:]?" + _simplifiedAddressRE +
+			")(?P<cmd>" + _commandRE + "?)(?P<rest>.*)$")
 )
 
 type resolvedAddress struct {
@@ -79,6 +90,7 @@ Command stores the command which has been parsed from user input.
 */
 type Command struct {
 	addrRange         AddressRange    // address range as parsed from user input
+	parsedAddrString  string          // the string entered for the address range  (for debugging purposes)
 	addressIsResolved bool            // will be 'false' by default; true implies resolvedAddress has been set
 	resolved          resolvedAddress // resolved addresses
 	cmd               string          // command identifier
@@ -113,44 +125,58 @@ func (cmd *Command) createNewResolvedCommand(newCmdIdent, newRestOfCmd string) (
 ParseCommand parses the given string and creates a Command object.
 */
 func ParseCommand(str string, debug bool) (cmd Command, err error) {
+	if debug {
+		fmt.Printf("ParseCommand, str: '%s'\n", str)
+	}
 	if strings.TrimSpace(str) == "" {
 		// newline alone == +1p
-		addrRange, err := newRange("+1")
-		if err != nil {
-			return Command{}, err
-		} else {
-			return Command{addrRange: addrRange, cmd: commandPrint, restOfCmd: ""}, nil
+		str = "+1p"
+	}
+	matches := findNamedMatches(commandLineRE, str, true)
+	/*
+		if matches == nil {
+			// add on implicit "p" and try again
+			matches = commandLineRE.FindStringSubmatch(str + "p")
 		}
-	}
-	// check for a number <n> --> equivalent to <n>p
-	matches := justNumberRE.FindStringSubmatch(str)
+	*/
+	// the RE really always matches. In case of a syntax error, 'addrRange' and 'cmd' will be empty and 'rest' will be filled
 	if matches != nil {
-		addrString := strings.TrimSpace(matches[1])
-		addrRange, err := newRange(addrString)
-		if err != nil {
-			return Command{}, err
-		} else {
-			return Command{addrRange: addrRange, cmd: commandPrint, restOfCmd: ""}, nil
-		}
-	}
-	matches = commandLineRE.FindStringSubmatch(str)
-	if matches == nil {
-		// add on implicit "p" and try again
-		matches = commandLineRE.FindStringSubmatch(str + "p")
-	}
-	if matches != nil {
-		addrString := strings.TrimSpace(matches[1])
-		cmdString := matches[2]
-		restOfCmd := matches[3]
-
+		addrString := strings.TrimSpace(matches["addrRange"])
+		cmdString := strings.TrimSpace(matches["cmd"])
+		restOfCmd := strings.TrimSpace(matches["rest"])
 		if debug {
-			fmt.Printf("parsed addrString: '%s', cmd: '%s', rest: '%s'\n", addrString, cmdString, restOfCmd)
+			fmt.Printf("parsed addrString: '%s', cmd: '%s', rest: %s\n", addrString, cmdString, restOfCmd)
+		}
+
+		if len(restOfCmd) != 0 && (restOfCmd[0:1] == "/" || restOfCmd[0:1] == "?") {
+			return Command{}, fmt.Errorf("could not parse command (non-terminated regex?)")
 		}
 		addrRange, err := newRange(addrString)
 		if err != nil {
-			return Command{}, err
+			return Command{}, fmt.Errorf("could not parse address range: %w", err)
 		} else {
-			return Command{addrRange: addrRange, cmd: cmdString, restOfCmd: restOfCmd}, nil
+			// if cmdString is empty, then use implicit "p"
+			if len(cmdString) == 0 {
+				// in this case, make sure restOfCmd is also empty
+				if len(restOfCmd) != 0 {
+					return Command{}, fmt.Errorf("general parse error")
+				}
+				cmdString = "p"
+			} else {
+				// check command
+				var cmdMatch bool
+				if cmdMatch, err = regexp.MatchString(_commandRE, cmdString); err != nil {
+					return Command{}, fmt.Errorf("RE error parsing command: '%s', error: %w", cmdString, err)
+				}
+				if !cmdMatch {
+					return Command{}, fmt.Errorf("could not parse command: '%s'", cmdString)
+				}
+			}
+			cmd := Command{parsedAddrString: addrString, addrRange: addrRange, cmd: cmdString, restOfCmd: restOfCmd}
+			if debug {
+				fmt.Printf("parsed cmd: '%v'\n", cmd)
+			}
+			return cmd, nil
 		}
 	} else {
 		return Command{}, errUnrecognisedCommand
@@ -451,7 +477,7 @@ func (cmd Command) Mark(state *State) error {
 	}
 	markName := matches[1]
 	if cmd.addrRange.end.isSpecified() {
-		return ErrRangeShouldNotBeSpecified
+		return ErrRangeMayNotBeSpecified
 	}
 	state.addMark(Mark{name: markName, lineNbr: cmd.resolved.start})
 	return nil
@@ -551,7 +577,7 @@ func (cmd Command) Put(state *State) error {
 	}
 	// range not allowed
 	if cmd.resolved.start != cmd.resolved.end {
-		return fmt.Errorf("put: %w", ErrRangeShouldNotBeSpecified)
+		return fmt.Errorf("put: %w", ErrRangeMayNotBeSpecified)
 	}
 
 	startLineNbr := cmd.resolved.start
@@ -1069,7 +1095,7 @@ func (cmd Command) ProcessCommand(state *State, enteredText *list.List, inGlobal
 		commandQuit, commandQuitUnconditionally,
 		commandUndo:
 		if cmd.addrRange.IsSpecified() {
-			err = ErrRangeShouldNotBeSpecified
+			err = ErrRangeMayNotBeSpecified
 		}
 	default:
 		//ok

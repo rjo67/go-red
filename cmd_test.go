@@ -154,6 +154,58 @@ func TestMove(t *testing.T) {
 	}
 }
 
+func TestParseValidCommands(t *testing.T) {
+	data := []struct {
+		input             string
+		expectedAddrRange string
+		expectedCommand   string
+		expectedRest      string
+	}{
+		{"", "+1", "p", ""},
+		{"p", "", "p", ""},
+		{"+1", "+1", "p", ""},
+		{"1,2d", "1,2", "d", ""},
+		{"'a,5y", "'a,5", "y", ""},
+		{"/234/,9m4", "/234/,9", "m", "4"},
+		{"?234?,'b  y", "?234?,'b", "y", ""},
+	}
+	for i, test := range data {
+		t.Run(fmt.Sprintf("test %d: >>%s<<", i, test.input), func(t *testing.T) {
+			createAndCheckCommand(t, test.input, test.expectedAddrRange, test.expectedCommand, test.expectedRest)
+		})
+	}
+}
+
+func TestParseInvalidCommands(t *testing.T) {
+	data := []struct {
+		input string
+	}{
+		{"?234,'b  y"},
+		{"4/,2m4"},
+		{"'qbe,2p"}, // gets parsed as 'q and command=b - therefore cmd error
+	}
+	for i, test := range data {
+		t.Run(fmt.Sprintf("test %d: >>%s<<", i, test.input), func(t *testing.T) {
+			if cmd, err := ParseCommand(test.input, false); err != nil {
+				// ok
+			} else {
+				t.Fatalf("expected error, got cmd: %v", cmd)
+			}
+		})
+	}
+}
+
+func createAndCheckCommand(t *testing.T, cmdString, expAddr, expCmd, expRestOfCmd string) {
+	var cmd Command
+	var err error
+	if cmd, err = ParseCommand(cmdString, false); err != nil {
+		t.Fatalf("error: %s", err)
+	}
+	assertString(t, fmt.Sprintf("bad command ('%s'): addrRange", cmdString), cmd.parsedAddrString, expAddr)
+	assertString(t, fmt.Sprintf("bad command ('%s'): cmdString", cmdString), cmd.cmd, expCmd)
+	assertString(t, fmt.Sprintf("bad command ('%s'): rest of command", cmdString), cmd.restOfCmd, expRestOfCmd)
+}
+
 func TestPrintRange(t *testing.T) {
 	var err error
 	var cmd Command

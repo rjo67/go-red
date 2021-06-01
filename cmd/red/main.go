@@ -98,7 +98,7 @@ func mainloop(state *red.State, reader *bufio.Reader) {
 				fmt.Printf("error: %s", err)
 			}
 		} else {
-			cmd, err := red.ParseCommand(cmdStr, state.Debug)
+			cmd, err := red.ParseCommand(cmdStr[0:len(cmdStr)-1], state.Debug) // remove LF
 			if err != nil {
 				fmt.Printf("? %s\n", err)
 			} else {

@@ -22,11 +22,11 @@ const (
 )
 
 var (
-	errBadRange                  error = errors.New("address range start > end")
-	errInvalidStartOfRange       error = errors.New("invalid start of range")
-	errInvalidEndOfRange         error = errors.New("invalid end of range")
-	ErrRangeShouldNotBeSpecified error = errors.New("a range may not be specified")
-	errUnrecognisedRange         error = errors.New("unrecognised address range")
+	errBadRange               error = errors.New("address range start > end")
+	errInvalidStartOfRange    error = errors.New("invalid start of range")
+	errInvalidEndOfRange      error = errors.New("invalid end of range")
+	ErrRangeMayNotBeSpecified error = errors.New("a range may not be specified")
+	errUnrecognisedRange      error = errors.New("unrecognised address range")
 )
 
 var addressRangeRE = regexp.MustCompile(`^(?P<address1>[^,;]*)` + `(?P<separator>[,;]?)` + `(?P<address2>[^,;]*)$`)
@@ -70,7 +70,7 @@ func (ra *AddressRange) calculateStartAndEndLineNumbers(currentLineNbr int, buff
 		}
 	} else {
 		if startLine, err = ra.start.calculateActualLineNumber(currentLineNbr, buffer); err != nil {
-			return -1, -1, errInvalidStartOfRange
+			return -1, -1, fmt.Errorf("%s: %w", errInvalidStartOfRange, err)
 		}
 	}
 
@@ -79,7 +79,7 @@ func (ra *AddressRange) calculateStartAndEndLineNumbers(currentLineNbr int, buff
 		endLine = startLine
 	} else {
 		if endLine, err = ra.end.calculateActualLineNumber(currentLineNbr, buffer); err != nil {
-			return -1, -1, errInvalidEndOfRange
+			return -1, -1, fmt.Errorf("%s: %w", errInvalidEndOfRange, err)
 		}
 	}
 

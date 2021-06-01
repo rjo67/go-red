@@ -52,9 +52,15 @@ func resetState(buffer []string) *State {
 	return state
 }
 
-func assertInt(t *testing.T, text string, val, expected int) {
+func assertInt(t *testing.T, errorText string, val, expected int) {
 	if val != expected {
-		t.Fatalf("assert failed: %s got %d, expected %d", text, val, expected)
+		t.Fatalf("assert failed: %s got %d, expected %d", errorText, val, expected)
+	}
+}
+
+func assertString(t *testing.T, errorText string, val, expected string) {
+	if val != expected {
+		t.Fatalf("assert failed: %s got %s, expected %s", errorText, val, expected)
 	}
 }
 
