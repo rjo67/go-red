@@ -15,6 +15,26 @@ func (cmd Command) Help(state *State) error {
 	fmt.Println()
 	if subcmd := strings.TrimSpace(cmd.restOfCmd); len(subcmd) != 0 {
 		switch subcmd {
+		case "address":
+			fmt.Println("An address can contain the following elements:")
+			fmt.Println(" .    The current line in the buffer.")
+			fmt.Println(" $    The last line in the buffer.")
+			fmt.Println(" n    The nth line in the buffer.")
+			fmt.Println(" +n   The nth next line.")
+			fmt.Println(" -n   The nth previous line.")
+			fmt.Println(" +    The next line. Equivalent to '+1'.")
+			fmt.Println(" -    The previous line. Equivalent to '-1'.")
+			fmt.Println(" /re/ The next line matching the regular expression re. The search wraps around.")
+			fmt.Println(" ?re? The previous line matching the regular expression re. The search wraps around.")
+			fmt.Println(" 'x   Refers to the line marked by a 'k' (mark) command. 'x' is a lower case letter in the range a-z.")
+			fmt.Println("\nAddress ranges consist of two addresses, separated by a comma or a semicolon.")
+			fmt.Println("In the case of a semicolon, the current line is set to the first address before the second is calculated.")
+			fmt.Println("The address range can omit either the first or second address or both:")
+			fmt.Println("  only 1st address specified: the 2nd address is set to the 1st address.")
+			fmt.Println("  , addr    : the 1st address is set to line 1.")
+			fmt.Println("  ; addr    : the 1st address is set to the current line.")
+			fmt.Println("  ,         : equals '1,$', i.e. the first to last lines in the buffer.")
+			fmt.Println("  ;         : equals '.;$', i.e. the current to last lines in the buffer.")
 		case commandAppend:
 			fmt.Println(" ", commandAppend, "Appends text after the addressed line.")
 			fmt.Println("\n  Text is entered in input mode, i.e. any number of lines, terminated by a fullstop on its own line.")
@@ -52,7 +72,7 @@ func (cmd Command) Help(state *State) error {
 			fmt.Println(" ", commandMove, "Moves lines in the buffer.")
 			fmt.Println("\n  The addressed lines are moved to after the destination address.")
 			fmt.Println("  Specifying the destination address '0' (zero) moves the addressed lines to the beginning of the buffer.")
-			fmt.Printf("\n  Example: 2,4%s5 moves lines 2-4  to after line 5.\n", commandMove)
+			fmt.Printf("\n  Example: 2,4%s5 moves lines 2-4 to after line 5.\n", commandMove)
 		case commandList, commandNumber, commandPrint:
 			fmt.Println(" ", commandList, "Display the addressed lines.")
 			fmt.Println(" ", commandNumber, "Prints the addressed lines with their line numbers.")
@@ -65,6 +85,7 @@ func (cmd Command) Help(state *State) error {
 		case commandRead:
 			fmt.Println(" ", commandRead, "Reads a file and appends it after the addressed line.")
 			fmt.Println("\n  Specifying the address '0' (zero) adds the file's contents at the beginning of the buffer.")
+			fmt.Printf("\n  Example: 2%s myfile.txt appends the contents of myfile.txt after line 2.\n", commandRead)
 		case commandSubstitute:
 			fmt.Println(" ", commandSubstitute, "Replaces text in lines matching a regular expression.")
 			fmt.Println("\n  Allowed suffixes are: 'g' global, 'count', or 'l', 'n', or 'p'.")
@@ -74,14 +95,19 @@ func (cmd Command) Help(state *State) error {
 			fmt.Println(" ", commandTransfer, "Copies (transfers) lines to a destination address.")
 		case commandUndo:
 			fmt.Println(" ", commandUndo, "Undoes the effect of the last command that modified anything in the buffer.")
-		case commandWrite, commandWriteAppend:
+		case commandWrite, commandWriteAppend, "wq":
 			fmt.Println(" ", commandWrite, "Writes the addressed lines to a file.")
+			fmt.Println(" ", "wq", "Writes the addressed lines to a file and exits the program.")
 			fmt.Println(" ", commandWriteAppend, "Appends the addressed lines to a file.")
+			fmt.Printf("\n  Example: 2,4%s rjo.1 writes lines 2-4 to the file 'rjo.1'.\n", commandWrite)
 		case commandPut, commandYank:
 			fmt.Println(" ", commandPut, "Puts (inserts) the cut-buffer after the addressed line.")
 			fmt.Println(" ", commandYank, "Copies (yanks) the addressed lines to the cut-buffer.")
 		case commandScroll:
 			fmt.Println(" ", commandScroll, "Scrolls n lines starting at the addressed line.")
+			fmt.Println("  The value for 'n' defaults to the window size and can be reset with this command:")
+			fmt.Printf("\n  Example 1: 2%s5 sets the window size to 5 and displays lines 2..7.\n", commandScroll)
+			fmt.Printf("  Example 2: 2%s displays <window-size> lines, starting at line 2.\n", commandScroll)
 		case commandComment:
 			fmt.Println(" ", commandComment, "Enters a comment (i.e. the line is ignored)")
 		case commandLinenumber:
@@ -122,6 +148,8 @@ func (cmd Command) Help(state *State) error {
 		fmt.Println(" ", commandScroll, "Scrolls n lines starting at the addressed line.")
 		fmt.Println(" ", commandComment, "Enters a comment (i.e. the line is ignored)")
 		fmt.Println(" ", commandLinenumber, "Prints the line number of the addressed line.")
+		fmt.Println("\nEnter h <cmd> for more help on a specific command.")
+		fmt.Println("Enter h address for help on addresses.")
 	}
 	fmt.Println()
 	return nil

@@ -72,7 +72,7 @@ func readInputFile(filename string, state *red.State) error {
 	if err != nil {
 		return fmt.Errorf("could not parse command %s", editCommandStr)
 	} else {
-		err = cmd.CmdEdit(state)
+		err = cmd.Edit(state)
 		if err != nil {
 			return fmt.Errorf("error reading file %s", filename)
 		}

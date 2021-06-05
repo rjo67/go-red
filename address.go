@@ -293,10 +293,10 @@ func (addr Address) calculateActualLineNumber(currentLineNbr int, buffer *list.L
 		}
 	}
 	if lineNbr < 0 {
-		return -1, errorInvalidLine(fmt.Sprintf("lineNbr: %d", lineNbr), nil)
+		return -1, errorInvalidLine(fmt.Sprintf("%d", lineNbr), nil)
 	}
 	if lineNbr > buffer.Len() {
-		return -1, errorInvalidLine(fmt.Sprintf("lineNbr: %d, max line: %d", lineNbr, buffer.Len()), nil)
+		return -1, errorInvalidLine(fmt.Sprintf("%d, max line: %d", lineNbr, buffer.Len()), nil)
 	}
 	return lineNbr, nil
 }

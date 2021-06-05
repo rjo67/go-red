@@ -77,7 +77,7 @@ var (
 	// In case of syntax errors (e.g. nonterminated regex, mark followed by number), the 'cmd' group will contain the string starting at the error
 	commandLineRE = regexp.MustCompile(
 		"^(?P<addrRange>" + _simplifiedAddressRE +
-			"[,:]?" + _simplifiedAddressRE +
+			"[,;]?" + _simplifiedAddressRE +
 			")(?P<cmd>" + _commandRE + "?)(?P<rest>.*)$")
 )
 
@@ -148,7 +148,7 @@ func ParseCommand(str string, debug bool) (cmd Command, err error) {
 			fmt.Printf("parsed addrString: '%s', cmd: '%s', rest: %s\n", addrString, cmdString, restOfCmd)
 		}
 
-		if len(restOfCmd) != 0 && (restOfCmd[0:1] == "/" || restOfCmd[0:1] == "?") {
+		if len(cmdString) == 0 && len(restOfCmd) != 0 && (restOfCmd[0:1] == "/" || restOfCmd[0:1] == "?") {
 			return Command{}, fmt.Errorf("could not parse command (non-terminated regex?)")
 		}
 		addrRange, err := newRange(addrString)
@@ -387,13 +387,13 @@ func (cmd Command) Delete(state *State, addUndo bool) error {
 }
 
 /*
-CmdEdit reads in a file, and sets the default filename.
+Edit reads in a file, and sets the default filename.
   If file is not specified, then the default filename is used.
   Any lines in the buffer are deleted before the new file is read.
   The current address is set to the address of the last line in the buffer.
   Resets undo buffer.
 */
-func (cmd Command) CmdEdit(state *State) error {
+func (cmd Command) Edit(state *State) error {
 	filename, err := getFilename(strings.TrimSpace(cmd.restOfCmd), state, true)
 	if err != nil {
 		return err
@@ -555,12 +555,15 @@ Print prints the addressed lines.
  The current address is set to the address of the last line printed.
 */
 func (cmd Command) Print(state *State) error {
+	if !cmd.addressIsResolved {
+		return errAddressHasNotBeenResolved
+	}
 	// no address specified defaults to .
 	// TODO don't think this can occur anymore
 	if !cmd.addrRange.IsSpecified() {
 		cmd.addrRange = newValidRange(identDot)
 	}
-	return _printRange(os.Stdout, cmd, state, cmd.cmd == commandNumber)
+	return _printRange(os.Stdout, cmd.resolved.start, cmd.resolved.end, state, cmd.cmd == commandNumber)
 }
 
 /*
@@ -596,7 +599,7 @@ func (cmd Command) Put(state *State) error {
 }
 
 /*
-CmdRead reads file and appends it after the addressed line.
+Read reads file and appends it after the addressed line.
 
  If file is not specified, then the default filename is used.
  If there is no default filename prior to the command, then the default filename is set to file.
@@ -606,26 +609,31 @@ CmdRead reads file and appends it after the addressed line.
 
  The current address is set to the address of the last line read or, if there were none, to the addressed line.
 */
-func (cmd Command) CmdRead(state *State) error {
+func (cmd Command) Read(state *State) error {
+	if !cmd.addressIsResolved {
+		return errAddressHasNotBeenResolved
+	}
+	// range not allowed
+	if cmd.addrRange.end.isSpecified() {
+		return fmt.Errorf("read: %w", ErrRangeMayNotBeSpecified)
+	}
+
 	filename, err := getFilename(strings.TrimSpace(cmd.restOfCmd), state, false)
 	if err != nil {
 		return err
 	}
 	var startLineNbr int
 	// default is append at eof
-	if !cmd.addrRange.IsSpecified() {
+	if cmd.addrRange.start.isNotSpecified() {
 		startLineNbr = state.Buffer.Len()
 	} else {
-		startLineNbr, err = cmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
-		if err != nil {
-			return err
-		}
+		startLineNbr = cmd.resolved.start
 	}
 	nbrBytesRead, listOfLines, err := ReadFile(filename)
 	if err != nil {
 		return err
 	}
-	fmt.Println(nbrBytesRead)
+	fmt.Printf("%dL, %dC\n", listOfLines.Len(), nbrBytesRead)
 	nbrLinesRead := listOfLines.Len()
 	if nbrLinesRead > 0 {
 		appendLines(startLineNbr, state, listOfLines)
@@ -638,23 +646,28 @@ func (cmd Command) CmdRead(state *State) error {
 }
 
 /*
-CmdScroll scrolls n lines at a time starting at addressed line, and sets window size to n.
+Scroll scrolls n lines at a time starting at addressed line, and sets window size to n.
  The current address is set to the address of the last line printed.
 
  If n is not specified, then the current window size is used.
 
  Window size defaults to screen size minus two lines, or to 22 if screen size can't be determined.
 */
-func (cmd Command) CmdScroll(state *State) error {
+func (cmd Command) Scroll(state *State) error {
+	return cmd._scroll(state, os.Stdout)
+}
+func (cmd Command) _scroll(state *State, writer io.Writer) error {
+	if !cmd.addressIsResolved {
+		return errAddressHasNotBeenResolved
+	}
+	if !cmd.addrRange.end.isNotSpecified() {
+		return fmt.Errorf("scroll: cannot specify an address range")
+	}
 	var startLineNbr, endLineNbr int
-	var err error
-	if !cmd.addrRange.IsSpecified() {
+	if cmd.addrRange.start.isNotSpecified() {
 		startLineNbr = state.lineNbr + 1
 	} else {
-		startLineNbr, err = cmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
-		if err != nil {
-			return err
-		}
+		startLineNbr = cmd.resolved.start
 	}
 	// check for 'z<n>'
 	if cmd.restOfCmd != "" {
@@ -673,15 +686,7 @@ func (cmd Command) CmdScroll(state *State) error {
 	startLineNbr = minIntOf(startLineNbr, state.Buffer.Len())
 	endLineNbr = minIntOf(endLineNbr, state.Buffer.Len())
 
-	var startAddr, endAddr Address
-	if startAddr, err = newAddress(strconv.Itoa(startLineNbr)); err != nil {
-		return err
-	}
-	if endAddr, err = newAddress(strconv.Itoa(endLineNbr)); err != nil {
-		return err
-	}
-	cmd.addrRange = AddressRange{startAddr, endAddr, separatorComma}
-	return _printRange(os.Stdout, cmd, state, true)
+	return _printRange(writer, startLineNbr, endLineNbr, state, true)
 }
 
 /*
@@ -722,9 +727,9 @@ func (cmd Command) Transfer(state *State) error {
 }
 
 /*
-CmdUndo undoes the previous command.
+Undo undoes the previous command.
 */
-func (cmd Command) CmdUndo(state *State) error {
+func (cmd Command) Undo(state *State) error {
 
 	if state.undo.Len() == 0 {
 		return errNothingToUndo
@@ -754,7 +759,7 @@ func (cmd Command) CmdUndo(state *State) error {
 }
 
 /*
-CmdWrite handles the commands "w", "wq", and "W".
+Write handles the commands "w", "wq", and "W".
 
  Writes (or appends in case of W) the addressed lines to file.
  Any previous contents of file is lost without warning.
@@ -766,9 +771,13 @@ CmdWrite handles the commands "w", "wq", and "W".
 
  In case of 'wq': a quit is performed immediately afterwards. (This is handled by the caller.)
 */
-func (cmd Command) CmdWrite(state *State) error {
+func (cmd Command) Write(state *State) error {
 	// save current address
 	currentLine := state.lineNbr
+
+	if !cmd.addressIsResolved {
+		return errAddressHasNotBeenResolved
+	}
 
 	// handle command sequence 'wq'
 	filename := strings.TrimPrefix(cmd.restOfCmd, commandQuit)
@@ -782,10 +791,7 @@ func (cmd Command) CmdWrite(state *State) error {
 		startLineNbr = 1
 		endLineNbr = state.Buffer.Len()
 	} else {
-		startLineNbr, endLineNbr, err = cmd.addrRange.calculateStartAndEndLineNumbers(state.lineNbr, state.Buffer)
-		if err != nil {
-			return err
-		}
+		startLineNbr, endLineNbr = cmd.resolved.start, cmd.resolved.end
 	}
 	// disallow 0
 	if startLineNbr == 0 {
@@ -995,29 +1001,22 @@ func getFilename(potentialFilename string, state *State, setDefault bool) (filen
 	return filename, nil
 }
 
-func _printRange(writer io.Writer, cmd Command, state *State, printLineNumbers bool) error {
-	if !cmd.addressIsResolved {
-		return fmt.Errorf("address has not been resolved")
-	}
-
+func _printRange(writer io.Writer, startLine, endLine int, state *State, printLineNumbers bool) error {
 	// disallow 0p
-	if cmd.resolved.start == 0 {
+	if startLine == 0 {
 		return fmt.Errorf("print: %w", errorInvalidLine("start line is 0", nil))
 	}
-	if cmd.resolved.end == 0 {
-		cmd.resolved.end = 1
+	if endLine == 0 {
+		endLine = 1
 	}
-
-	/* already checked
-	if startLineNbr > endLineNbr {
-		panic(fmt.Sprintf("start line: %d, end line %d", startLineNbr, endLineNbr))
+	if startLine > endLine {
+		panic(fmt.Sprintf("start line: %d, end line %d", startLine, endLine))
 	}
-	*/
-	moveToLine(cmd.resolved.start, state)
+	moveToLine(startLine, state)
 
 	el := state.dotline
 	prevEl := el
-	for lineNbr := cmd.resolved.start; lineNbr <= cmd.resolved.end; lineNbr++ {
+	for lineNbr := startLine; lineNbr <= endLine; lineNbr++ {
 		_printLine(writer, lineNbr, el.Value.(Line).Line, printLineNumbers)
 		prevEl = el // store el, to be able to set dotline i/c we hit the end of the list
 		el = el.Next()
@@ -1028,7 +1027,7 @@ func _printRange(writer io.Writer, cmd Command, state *State, printLineNumbers b
 	} else {
 		state.dotline = prevEl
 	}
-	state.lineNbr = cmd.resolved.end
+	state.lineNbr = endLine
 	return nil
 }
 
@@ -1119,10 +1118,10 @@ func (cmd Command) ProcessCommand(state *State, enteredText *list.List, inGlobal
 		if state.changedSinceLastWrite {
 			fmt.Println(unsavedChanges)
 		} else {
-			err = cmd.CmdEdit(state)
+			err = cmd.Edit(state)
 		}
 	case commandEditUnconditionally:
-		err = cmd.CmdEdit(state)
+		err = cmd.Edit(state)
 	case commandFilename:
 		state.defaultFilename = strings.TrimSpace(cmd.restOfCmd)
 	case commandGlobal:
@@ -1154,15 +1153,15 @@ func (cmd Command) ProcessCommand(state *State, enteredText *list.List, inGlobal
 			quit = true
 		}
 	case commandRead:
-		err = cmd.CmdRead(state)
+		err = cmd.Read(state)
 	case commandSubstitute:
 		err = cmd.CmdSubstitute(state)
 	case commandTransfer:
 		err = cmd.Transfer(state)
 	case commandUndo:
-		err = cmd.CmdUndo(state)
+		err = cmd.Undo(state)
 	case commandWrite:
-		err = cmd.CmdWrite(state)
+		err = cmd.Write(state)
 		quit = (cmd.cmd == commandWrite && strings.HasPrefix(cmd.restOfCmd, commandQuit))
 	case commandWriteAppend:
 		fmt.Println("not yet implemented")
@@ -1171,7 +1170,7 @@ func (cmd Command) ProcessCommand(state *State, enteredText *list.List, inGlobal
 	case commandYank:
 		err = cmd.Yank(state)
 	case commandScroll:
-		err = cmd.CmdScroll(state)
+		err = cmd.Scroll(state)
 	case commandComment:
 		err = cmd.Comment(state)
 	case commandLinenumber:

@@ -1,6 +1,7 @@
 package red
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"testing"
@@ -161,6 +162,8 @@ func TestParseValidCommands(t *testing.T) {
 		expectedCommand   string
 		expectedRest      string
 	}{
+		{"/line/;+3", "/line/;+3", "p", ""},
+		{"1,2 s/hello/goodbye/g", "1,2", "s", "/hello/goodbye/g"},
 		{"", "+1", "p", ""},
 		{"p", "", "p", ""},
 		{"e bigfile.txt", "", "e", "bigfile.txt"},
@@ -218,7 +221,7 @@ func TestPrintRange(t *testing.T) {
 	// to capture the output
 	var buff bytes.Buffer // implements io.Writer
 
-	if err := _printRange(&buff, cmd, state, false); err != nil {
+	if err := _printRange(&buff, cmd.resolved.start, cmd.resolved.end, state, false); err != nil {
 		t.Fatalf("error %s", err)
 	}
 	if buff.String() != "2\n3\n" {
@@ -229,7 +232,7 @@ func TestPrintRange(t *testing.T) {
 	if cmd, err = createCommandAndResolveAddressRange(state, newValidRange("1, 4"), commandPrint, ""); err != nil {
 		t.Fatalf("error %s", err)
 	}
-	if err = _printRange(&buff, cmd, state, false); err != nil {
+	if err = _printRange(&buff, cmd.resolved.start, cmd.resolved.end, state, false); err != nil {
 		t.Fatalf("error %s", err)
 	}
 	if buff.String() != "1\n2\n3\n4\n" {
@@ -240,7 +243,7 @@ func TestPrintRange(t *testing.T) {
 	if cmd, err = createCommandAndResolveAddressRange(state, newValidRange("3,3"), commandPrint, ""); err != nil {
 		t.Fatalf("error %s", err)
 	}
-	if err = _printRange(&buff, cmd, state, false); err != nil {
+	if err = _printRange(&buff, cmd.resolved.start, cmd.resolved.end, state, false); err != nil {
 		t.Fatalf("error %s", err)
 	}
 	if buff.String() != "3\n" {
@@ -255,12 +258,51 @@ func TestPrintRange(t *testing.T) {
 	if err = cmd.resolveAddress(state); err != nil {
 		t.Fatalf("error %s", err)
 	}
-	if err = _printRange(&buff, cmd, state, false); err != nil {
+	if err = _printRange(&buff, cmd.resolved.start, cmd.resolved.end, state, false); err != nil {
 		t.Fatalf("error %s", err)
 	}
 	if buff.String() != "4\n" {
 		t.Fatalf("+1 returned '%s'", buff.String())
 	}
+}
+
+func TestScroll(t *testing.T) {
+	var err error
+	var cmd Command
+	state := resetState([]string{"1", "2", "3", "4", "5"})
+	state.WindowSize = 2
+	if cmd, err = createCommandAndResolveAddressRange(state, newValidRange("2"), commandScroll, ""); err != nil {
+		t.Fatalf("error %s", err)
+	}
+
+	// to capture the output
+	var buff bytes.Buffer            // implements io.Writer
+	writer := bufio.NewWriter(&buff) // -> bufio
+
+	if err := cmd._scroll(state, writer); err != nil {
+		t.Fatalf("error %s", err)
+	}
+	writer.Flush()
+	if buff.String() != "   2\t 2\n   3\t 3\n   4\t 4\n" {
+		t.Fatalf("2z returned '%s'", buff.String())
+	}
+	assertInt(t, "bad scroll size", state.WindowSize, 2)
+
+	//1z3
+	state = resetState([]string{"1", "2", "3", "4", "5"})
+	buff = bytes.Buffer{}
+	state.WindowSize = 2
+	if cmd, err = createCommandAndResolveAddressRange(state, newValidRange("1"), commandScroll, "3"); err != nil {
+		t.Fatalf("error %s", err)
+	}
+	if err := cmd._scroll(state, writer); err != nil {
+		t.Fatalf("error %s", err)
+	}
+	writer.Flush()
+	if buff.String() != "   1\t 1\n   2\t 2\n   3\t 3\n   4\t 4\n" {
+		t.Fatalf("1z4 returned '%s'", buff.String())
+	}
+	assertInt(t, "bad scroll size", state.WindowSize, 3)
 }
 
 func TestPut(t *testing.T) {
