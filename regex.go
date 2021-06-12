@@ -49,7 +49,7 @@ CmdGlobal processes the global command, which makes two passes over the file.
 */
 func (cmd Command) CmdGlobal(state *State) error {
 	currentLineNbr := state.lineNbr
-	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state.lineNbr, state.Buffer)
+	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state.lineNbr, state.Buffer, state.marks)
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ CmdSubstitute replaces text in the addressed lines matching a regular expression
 */
 func (cmd Command) CmdSubstitute(state *State) error {
 
-	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state.lineNbr, state.Buffer)
+	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state.lineNbr, state.Buffer, state.marks)
 	if err != nil {
 		return err
 	}

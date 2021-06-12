@@ -48,18 +48,18 @@ func (r AddressRange) String() string {
   as given by calculateStartAndEndLineNumbers. It is an error if start > end.
  Otherwise, returns the current line number as start and end.
 */
-func (ra AddressRange) getAddressRange(currentLineNbr int, buffer *list.List) (startLine int, endLine int, err error) {
+func (ra AddressRange) getAddressRange(currentLineNbr int, buffer *list.List, marks map[string]int) (startLine int, endLine int, err error) {
 	if !ra.IsSpecified() {
 		return currentLineNbr, currentLineNbr, nil
 	}
-	return ra.calculateStartAndEndLineNumbers(currentLineNbr, buffer)
+	return ra.calculateStartAndEndLineNumbers(currentLineNbr, buffer, marks)
 }
 
 /*
  Calculates the start and end line numbers from the given address range.
  It is an error if start > end.
 */
-func (ra *AddressRange) calculateStartAndEndLineNumbers(currentLineNbr int, buffer *list.List) (startLine int, endLine int, err error) {
+func (ra *AddressRange) calculateStartAndEndLineNumbers(currentLineNbr int, buffer *list.List, marks map[string]int) (startLine int, endLine int, err error) {
 	// special case 1: first address empty -> {1,addr} or {.;addr}
 	if ra.start.isNotSpecified() {
 		switch ra.separator {
@@ -69,16 +69,20 @@ func (ra *AddressRange) calculateStartAndEndLineNumbers(currentLineNbr int, buff
 			startLine = currentLineNbr
 		}
 	} else {
-		if startLine, err = ra.start.calculateActualLineNumber(currentLineNbr, buffer); err != nil {
+		if startLine, err = ra.start.calculateActualLineNumber(currentLineNbr, buffer, marks); err != nil {
 			return -1, -1, fmt.Errorf("%s: %w", errInvalidStartOfRange, err)
 		}
+	}
+
+	if ra.separator == identSemicolon {
+		currentLineNbr = startLine
 	}
 
 	// special case 2) first address given, second empty -> {<given address>, <given address>}
 	if ra.end.isNotSpecified() {
 		endLine = startLine
 	} else {
-		if endLine, err = ra.end.calculateActualLineNumber(currentLineNbr, buffer); err != nil {
+		if endLine, err = ra.end.calculateActualLineNumber(currentLineNbr, buffer, marks); err != nil {
 			return -1, -1, fmt.Errorf("%s: %w", errInvalidEndOfRange, err)
 		}
 	}

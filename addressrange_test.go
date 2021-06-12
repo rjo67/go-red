@@ -14,6 +14,9 @@ func TestRangeErrors(t *testing.T) {
 		{"1,2--"},
 		{"+3,-2"},
 		{"+ 3 , -2"},
+		{"'b,'a"},
+		{"'a+3,'b"},
+		{"'a+,'a"},
 	}
 	for _, test := range data {
 		t.Run(fmt.Sprintf(">>%s<<", test.addrRange), func(t *testing.T) {
@@ -21,7 +24,12 @@ func TestRangeErrors(t *testing.T) {
 			if err != nil {
 				t.Errorf("error: %s", err)
 			} else {
-				start, end, err := r.calculateStartAndEndLineNumbers(1, createListOfLines([]string{"1", "2", "3", "4 123", "5", "6 456regex", "7", "8"}))
+				lines := createListOfLines([]string{"1", "2", "3", "4 123", "5", "6 456regex", "7", "8"})
+				marks := map[string]int{
+					"a": 1,
+					"b": 3,
+				}
+				start, end, err := r.calculateStartAndEndLineNumbers(1, lines, marks)
 				if err != nil {
 					// ok
 				} else {
@@ -39,6 +47,13 @@ func TestCreateAddressRange(t *testing.T) {
 		startLine                  int
 		expectedStart, expectedEnd int
 	}{
+		// sep=; tests
+		{"2;+1", 1, 2, 3},
+		{"/regex/;+2", 5, 6, 8},
+		{"/regex/,+2", 5, 6, 7},      // sep=,
+		{"?first line?,+2", 5, 1, 7}, // sep=,
+		{"?first line?;+2", 5, 1, 3},
+
 		{"+,5", 2, 3, 5},
 		{"-,+", 2, 1, 3},
 		{"++,$", 1, 3, 8},
@@ -61,15 +76,6 @@ func TestCreateAddressRange(t *testing.T) {
 		{"$", 3, 8, 8},
 		{"5", 3, 5, 5},
 		{".", 5, 5, 5},
-		// marks
-		//{"'a,'b", mark, "a", mark, "b"},
-		//{"'a,/123/", mark, "a", regexForward, "123"},
-		//{"'a ,'b", mark, "a", mark, "b"},
-		//{"'b,?abc?", mark, "b", regexBackward, "abc"},
-		//{"'a, /123/", mark, "a", regexForward, "123"},
-		//{"'b  ,  ?abc?", mark, "b", regexBackward, "abc"},
-		//{"?abc?,'d", regexBackward, "abc", mark, "d"},
-		//{"?abc?,  'd", regexBackward, "abc", mark, "d"},
 		// regex
 		{"/123/,/456/", 2, 4, 6},
 		{"/123/ ,/456/    ", 1, 4, 6},
@@ -83,7 +89,8 @@ func TestCreateAddressRange(t *testing.T) {
 			if err != nil {
 				t.Errorf("error: %s", err)
 			} else {
-				start, end, err := r.calculateStartAndEndLineNumbers(test.startLine, createListOfLines([]string{"1", "2", "3", "4 123", "5", "6 456regex", "7", "8"}))
+				start, end, err := r.calculateStartAndEndLineNumbers(test.startLine,
+					createListOfLines([]string{"1 first line", "2", "3", "4 123", "5", "6 456regex", "7", "8"}), make(map[string]int))
 				if err != nil {
 					t.Errorf("error: %s", err)
 				}
@@ -99,6 +106,47 @@ func TestCreateAddressRange(t *testing.T) {
 	}
 	if r.IsSpecified() {
 		t.Errorf("expected not specified, got %s", r)
+	}
+
+}
+
+func TestCreateAddressRangeMarks(t *testing.T) {
+	data := []struct {
+		addrRange                  string
+		startLine                  int
+		expectedStart, expectedEnd int
+	}{
+		// marks
+		{"'a,'b", 1, 2, 3},
+		{"'a,/fifth/", 1, 2, 5},
+		{"'a, /fourth/  ", 1, 2, 4},
+		{"'a ,'b", 2, 2, 3},
+		{"?first?,'b", 2, 1, 3},
+		{"  ?first?  ,  'b", 2, 1, 3},
+		{"?second?,'c", 5, 2, 6},
+		{"?third?,  'c-", 4, 3, 5},
+	}
+
+	for _, test := range data {
+		t.Run(fmt.Sprintf(">>%s<<", test.addrRange), func(t *testing.T) {
+			r, err := newRange(test.addrRange)
+			if err != nil {
+				t.Errorf("error: %s", err)
+			} else {
+				lines := createListOfLines([]string{"first line", "second", "third", "fourth", "fifth", "sixth"})
+				marks := map[string]int{
+					"a": 2,
+					"b": 3,
+					"c": 6,
+				}
+				start, end, err := r.calculateStartAndEndLineNumbers(test.startLine, lines, marks)
+				if err != nil {
+					t.Errorf("error: %s", err)
+				}
+				assertInt(t, "bad start", start, test.expectedStart)
+				assertInt(t, "bad end", end, test.expectedEnd)
+			}
+		})
 	}
 
 }

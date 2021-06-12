@@ -119,6 +119,7 @@ func TestCalculateActualLineNumber(t *testing.T) {
 		{1, "+ +2", 4},
 		{2, "+ -2", 1},
 		{4, "+ - ++ 2", 8},
+		{1, "2++", 4},
 		// . $
 		{2, "$", 8},
 		{3, "$-1", 7},
@@ -128,9 +129,8 @@ func TestCalculateActualLineNumber(t *testing.T) {
 		{4, ".1", 5},
 		{2, ".++1", 4},
 		{2, ".++4", 7},
-		{1, "2++", 4},
 		// mark
-		//	{1, "'a", 2}, not yet implemented
+		{1, "'a", 2},
 		// regex
 		{1, "/3/", 3},
 		{5, "+?3?", 3},
@@ -142,7 +142,10 @@ func TestCalculateActualLineNumber(t *testing.T) {
 			if err != nil {
 				t.Errorf("error: %s", err)
 			} else {
-				lineNbr, err := addr.calculateActualLineNumber(test.startLine, createListOfLines([]string{"1", "2", "3", "4", "5", "6", "7", "8"}))
+				marks := map[string]int{
+					"a": 2,
+				}
+				lineNbr, err := addr.calculateActualLineNumber(test.startLine, createListOfLines([]string{"1", "2", "3", "4", "5", "6", "7", "8"}), marks)
 				if err != nil {
 					t.Errorf("error: %s", err)
 				} else {
@@ -172,6 +175,8 @@ func TestInvalidCalculateActualLineNumber(t *testing.T) {
 		// syntactically legal, but an invalid actual line
 		{1, "$1"},
 		{3, "1--"},
+		// unknown mark
+		{3, "'a+"},
 	}
 
 	for _, test := range data {
@@ -180,7 +185,7 @@ func TestInvalidCalculateActualLineNumber(t *testing.T) {
 			if err != nil {
 				t.Errorf("error: %s", err)
 			} else {
-				lineNbr, err := addr.calculateActualLineNumber(test.startLine, createListOfLines([]string{"1", "2", "3", "4", "5", "6", "7", "8"}))
+				lineNbr, err := addr.calculateActualLineNumber(test.startLine, createListOfLines([]string{"1", "2", "3", "4", "5", "6", "7", "8"}), make(map[string]int))
 				if err != nil {
 					// ok
 				} else {

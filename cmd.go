@@ -98,7 +98,7 @@ type Command struct {
 }
 
 func (cmd *Command) resolveAddress(state *State) error {
-	start, end, err := cmd.addrRange.calculateStartAndEndLineNumbers(state.lineNbr, state.Buffer)
+	start, end, err := cmd.addrRange.calculateStartAndEndLineNumbers(state.lineNbr, state.Buffer, state.marks)
 	if err != nil {
 		return err
 	}
@@ -512,7 +512,7 @@ func (cmd Command) Move(state *State) error {
 		if destLine, err = newAddress(destStr); err != nil {
 			return errorInvalidDestination(destStr, err)
 		}
-		if destLineNbr, err = destLine.calculateActualLineNumber(state.lineNbr, state.Buffer); err != nil {
+		if destLineNbr, err = destLine.calculateActualLineNumber(state.lineNbr, state.Buffer, state.marks); err != nil {
 			return errorInvalidDestination(destStr, err)
 		}
 	}
@@ -697,7 +697,7 @@ Transfer copies (i.e. transfers) the addressed lines to after the right-hand des
  The current address is set to the address of the last line copied.
 */
 func (cmd Command) Transfer(state *State) error {
-	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state.lineNbr, state.Buffer)
+	startLineNbr, endLineNbr, err := cmd.addrRange.getAddressRange(state.lineNbr, state.Buffer, state.marks)
 	if err != nil {
 		return err
 	}
@@ -710,7 +710,7 @@ func (cmd Command) Transfer(state *State) error {
 		if destLine, err = newAddress(destStr); err != nil {
 			return errorInvalidDestination(fmt.Sprintf("transfer: error parsing destination address: %s", destStr), err)
 		}
-		if destLineNbr, err = destLine.calculateActualLineNumber(state.lineNbr, state.Buffer); err != nil {
+		if destLineNbr, err = destLine.calculateActualLineNumber(state.lineNbr, state.Buffer, state.marks); err != nil {
 			return err
 		}
 	}
@@ -843,18 +843,18 @@ func (cmd Command) Yank(state *State) error {
 */
 func handleUndoMove(undoCmd Undo, state *State) error {
 	// first the delete...
-	undoStartLine, err := undoCmd.cmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
+	undoStartLine, err := undoCmd.cmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer, state.marks)
 	if err != nil {
 		return err
 	}
-	undoEndLine, err := undoCmd.cmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
+	undoEndLine, err := undoCmd.cmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer, state.marks)
 	if err != nil {
 		return err
 	}
 	_ = deleteLines(undoStartLine, undoEndLine, state)
 
 	// ...then the append. The line to append at is stored in the original command
-	originalStartLine, err := undoCmd.originalCmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer)
+	originalStartLine, err := undoCmd.originalCmd.addrRange.start.calculateActualLineNumber(state.lineNbr, state.Buffer, state.marks)
 	if err != nil {
 		return err
 	}

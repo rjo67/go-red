@@ -70,7 +70,7 @@ func errorInvalidLine(str string, err error) error {
 	return &AddressError{Msg: fmt.Sprintf("invalid line: %s", str), Err: err}
 }
 
-// errorImvalidDestination is used by commands which take a 'destination'
+// errorInvalidDestination is used by commands which take a 'destination'
 func errorInvalidDestination(str string, err error) error {
 	return &AddressError{Msg: fmt.Sprintf("invalid destination: %s", str), Err: err}
 }
@@ -226,10 +226,11 @@ func (addr Address) addressPartsAsString() string {
 }
 
 /*
- calculateActuaLineNumber returns an actual line number specified by the address, depending on the current linenbr and the list of lines.
+ calculateActuaLineNumber calculates and returns the actual line number specified by the address,
+ depending on the current linenbr and the list of lines. (The list of marks can also be required.)
  Returns error errInvalidLine if the resulting line number is out-of-bounds (<0, > max).
 */
-func (addr Address) calculateActualLineNumber(currentLineNbr int, buffer *list.List) (int, error) {
+func (addr Address) calculateActualLineNumber(currentLineNbr int, buffer *list.List, marks map[string]int) (int, error) {
 	var lineNbr int = currentLineNbr
 	if addr.isNotSpecified() {
 		return currentLineNbr, nil
@@ -251,9 +252,12 @@ func (addr Address) calculateActualLineNumber(currentLineNbr int, buffer *list.L
 			// noop - ignored
 			parsingAddressOffset = true
 		case identMark:
-			// TODO
-			return -1, fmt.Errorf("mark in address not yet implemented")
-			parsingAddressOffset = true
+			if markLineNbr, markDefined := marks[addrPart.info]; markDefined {
+				lineNbr = markLineNbr
+				parsingAddressOffset = true
+			} else {
+				return -1, fmt.Errorf("unknown mark: '%s'", addrPart.info)
+			}
 		case identRegexForward:
 			matchingLineNbr, err := matchLineForward(lineNbr, addrPart.info, buffer)
 			if err != nil {
